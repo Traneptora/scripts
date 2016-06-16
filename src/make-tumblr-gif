@@ -1,0 +1,119 @@
+#!/bin/bash
+set -e
+
+finish() {
+	if [ $? -ne 0 ] ; then
+		echo "Some error occurred. :("
+	fi
+	rm -f $mkvfile
+	rm -f $palettefile
+	rm -f $datafile
+	rm -f $giffile
+}
+
+trap finish EXIT
+
+usage(){
+	echo "Usage:" $(basename $0) "input_video_file output_gif_file [--fullrate]"
+	echo
+	echo $(basename $0) "converts the input video to a GIF with size between 1.9 MB and 2.0 MB."
+	echo "2.0 MB is the tumblr GIF size limit, which is why this limit is useful."
+	echo "It normally halves the framerate but --fullrate tells" $(basename $0) "to use the full frame rate."
+}
+
+if [ "$1" = "-h" ] || [ "$1" = "-?" ] || [ "$2" = "" ] || [ "$1" = "-help" ] || [ "$1" = "--help" ] ; then
+	usage
+	exit 1
+fi
+
+
+datafile=$(mktemp)
+palettefile=$(mktemp)
+giffile=$(mktemp)
+mkvfile=$(mktemp)
+
+inputfile="$1"
+outputfile="$2"
+
+ffprobe -select_streams v -of flat -show_streams -show_format -hide_banner >$datafile 2>/dev/null "$1"
+
+extract() {
+	value=$(grep streams.stream.0.$1= $datafile | sed "s/streams.stream.0.$1=//")
+	if [ -z "$value" ] || [ "$value" = '"N/A"' ] ; then
+		value=$(grep format.$1= $datafile | sed "s/format.$1=//")
+	fi
+	echo $value
+}
+
+filesize() {
+	stat -c%s "$1"
+}
+
+width=$(extract width)
+height=$(extract height)
+duration=$(extract duration | tr -d '"')
+rate=$(extract r_frame_rate | tr '"' ' ' | bc)
+halfrate=$(echo "($rate)*0.5" | bc)
+framerate="-r $halfrate"
+if [ "$3" = "--fullrate" ] ; then
+	framerate=""
+fi
+
+scale=1
+scalehigh=1
+scalelow=1
+foundlowerbound=0
+
+fractionDone(){
+	while read line; do
+		timedone=$(echo $line | tr ' ' '\n' | grep time= | sed 's/time=//' | awk -F: '{ print ($1 * 3600) + ($2 * 60) + $3 }')
+		printf "%s%%\n" $(echo "scale=4;$timedone/$duration*100" | bc)
+	done
+}
+
+creategif(){
+	newwidth=$(echo "scale=0;" $width \* $scale | bc)
+	newheight=$(echo "scale=0;" $height \* $scale | bc)
+	
+	echo "Testing Size: " ${newwidth%.*}x${newheight%.*}
+	ffmpeg -y -i "$inputfile" -map 0:v -pix_fmt yuv420p -s ${newwidth%.*}x${newheight%.*} $framerate -c ffv1 -f matroska $mkvfile 2>&1 | stdbuf -o0 tr '\r' '\n' | grep --line-buffered "^frame" | fractionDone | while read line; do echo -n "Scaling Video... "; echo $line; done | stdbuf -o0 tr '\n' '\r'
+	echo -n "Scaling Video... Done. Generating Palette... "
+	ffmpeg -y -i $mkvfile -vf palettegen -c png -f image2 $palettefile >/dev/null 2>&1
+	echo "Done. " | tr '\n' '\r'
+	ffmpeg -y -i $mkvfile -i $palettefile -lavfi paletteuse -c gif -f gif $giffile 2>&1 | stdbuf -o0 tr '\r' '\n' | grep --line-buffered "^frame" | fractionDone | while read line; do echo -n "Scaling Video... Done. Generating Palette... Done. Generating GIF... "; echo $line; done | stdbuf -o0 tr '\n' '\r'
+	echo "Scaling Video... Done. Generating Palette... Done. Generating GIF... Done.        "
+}
+
+adjustscale(){
+	echo -n "Checking Filesize... "
+	currfilesize=$(filesize $giffile)
+	if [ $currfilesize -gt 2000000 ] ; then
+		if [ $foundlowerbound -eq 0 ] ; then
+			echo -n "Too Big: "
+			scalehigh=$scale
+			scalelow=$(echo $scale / 2 | bc -l)
+			scale=$scalelow
+		else
+			echo -n "Too Big: "
+			scalehigh=$scale
+			scale=$(echo 0.5 \* $scalelow + 0.5 \* $scalehigh | bc -l)
+		fi
+	elif [ $currfilesize -lt 1900000 ] && [ $(echo "$scale < 1" | bc) -ne 0 ]; then
+		echo -n "Too Small: "
+		foundlowerbound=1
+		scalelow=$scale
+		scale=$(echo 0.5 \* $scalelow + 0.5 \* $scalehigh | bc -l)
+	else
+		echo -n "Just right: "
+	fi
+	echo $currfilesize
+	echo
+}
+
+while [ $(echo "$scale < 1" | bc) -ne 0 ] && [ $(filesize $giffile) -lt 1900000 ] || [ $(filesize $giffile) -gt 2000000 ] || [ $(filesize $giffile) -eq 0 ] ; do
+	creategif
+	adjustscale
+done
+
+mv $giffile "$outputfile"
+

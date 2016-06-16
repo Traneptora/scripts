@@ -1,0 +1,45 @@
+#!/bin/bash
+set -e
+
+usage(){
+	echo "Usage: cuesplit cuefile.cue audiofile.audio"
+	exit 1
+}
+
+if [ ! $# = 2 ]; then
+	usage
+fi
+
+filename="$2.flac"
+
+finish(){
+	rm -f "$filename"
+}
+
+trap finish EXIT
+
+echo "Creating flac..."
+
+if [ $(ffprobe "$2" -show_streams 2>/dev/null | grep -E '^codec_name=.+$') = 'codec_name=flac' ] ; then
+	ln -s "$2" "$filename"
+else
+	ffmpeg -y -i "$2" -c flac "$filename"
+fi
+
+echo "Splitting..."
+
+shnsplit -f "$1" -o flac "$filename"
+
+echo "Tagging..."
+
+
+cuetag.sh "$1" split-track??.flac
+
+echo "Renaming..."
+
+for flac in split-track??.flac ; do
+	mv "$flac" "$(ffprobe "$flac" 2>&1 | grep -Ei 'track\s+:\s' | sed -r 's/.*?:\s(.*)/\1/') $(ffprobe "$flac" 2>&1 | grep -Ei 'title\s+:\s' | sed -r 's/.*?:\s(.*)/\1/').flac"
+done
+
+echo "Done!"
+

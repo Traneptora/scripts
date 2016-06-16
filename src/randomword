@@ -1,0 +1,5 @@
+#!/bin/bash
+
+head -n $(( $RANDOM$RANDOM%$(cat /usr/share/dict/cracklib-small | wc -l) )) /usr/share/dict/cracklib-small | tail -n 1
+
+

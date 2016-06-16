@@ -1,0 +1,5 @@
+#!/bin/sh
+
+x11vnc -usepw -forever -many -noxdamage -auth /home/leo/.Xauthority -display :0 -shared -bg -o /var/log/x11vnc.log
+
+

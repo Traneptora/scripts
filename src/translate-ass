@@ -1,0 +1,12 @@
+#!/bin/sh
+
+while read line; do
+	if ( echo "$line" | grep ,, >/dev/null ) ; then
+		transline=$(trans -brief $1 "$(echo "$line" | sed 's/.*,,\(.*\)/\1/')")
+		echo -n "$line" | sed 's/\(.*,,\).*/\1/'
+		echo "$transline"
+	else
+		echo $line
+	fi
+done
+

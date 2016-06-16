@@ -1,0 +1,69 @@
+#!/bin/bash 
+set -e
+
+usage(){
+	echo "Usage:" "$(basename $0)" "[archive.tar] [switches]... file_or_directory..."
+	echo "      " "$(basename $0)" "--no-tar [switches]... file_or_directory..."; echo
+	echo "exsorttar will take a list of files and directories and recurse through with the find command."; echo
+	echo "It will create a tar archive with directories first (sorted by name, starting with the top directories), followed by regular files (sorted by file extension, then by filename, then by directory name), followed by everything else (including symbolic links, etc.)"; echo
+	echo "Pass --help or -h or -? or -help to print this message."
+	echo "Pass --no-tar as the archive name to not create an archive, only print the list."
+	echo "Pass - as the archive name to write the archive to standard out."
+	echo "Pass --findargs=something to pass \"something\" as an argument to find."
+	echo "Pass --exclude=pattern to ignore any path with the given pattern."
+	echo "	" "Example: --exclude='*.git*'"
+	echo "Note: The tar archive will be uncompressed. Write the archive to standard out and filter using your favorite compression program to create a compressed archive on the fly."
+	echo "Warning: Careful with directory names starting with a - as this may mess up find."
+	exit 1
+}
+
+if [ $# -le 1 ] ; then
+	usage
+fi
+
+for i; do
+    if [[ "$i" =~ ^--help|-h|-\?|-help$ ]] ; then
+    	usage
+    fi
+done
+
+tarfile="$1"
+findargs=()
+filelist=()
+
+for i; do
+	if [ "$i" = "--no-tar" ] ; then
+		tarfile="--no-tar"
+		break
+	fi
+done
+
+for i; do
+	if [[ "$i" =~ ^--findargs=.+$ ]] ; then
+		j="$(echo "$i" | sed 's/^--findargs=\(.*\)$/\1/')"
+		findargs+=("$j")
+	elif [[ "$i" =~ ^--exclude=.+$ ]]; then
+		j="$(echo "$i" | sed 's/^--exclude=\(.*\)$/\1/')"
+		findargs+=("-not")
+		findargs+=("-path")
+		findargs+=("$j")
+		findargs+=("-and")
+	elif [ ! "$i" = "$tarfile" ] ; then
+		filelist+=("$i")
+	fi
+done
+
+sortbyext(){
+    sed 's_^\(\([^/]*/\)*\)\(.*\)\(\.[^\./]*\)$_\4/\3/\1_' | sed 's_^\(\([^/]*/\)*\)\([^\./]\+\)$_/\3/\1_'  | sort -t/ -k1,1 -k2,2 -k3,3 | sed 's_^\([^/]*\)/\([^/]*\)/\(.*\)$_\3\2\1_'
+}
+
+printfilelist(){
+	cat <(find ${filelist[@]} ${findargs[@]} -type d | sort -t/) <(find ${filelist[@]} ${findargs[@]} -type f | sortbyext) <(find ${filelist[@]} ${findargs[@]} -not -type d -and -not -type f | sort -t/)
+}
+
+if [ "$tarfile" = "--no-tar" ] ; then
+	printfilelist
+else
+	tar --no-recursion -T <( printfilelist ) -cvf "$tarfile"
+fi
+

@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "-r" ] || [ "$1" = "--recursive" ] ; then
+	find -name '*~' -or -name '~$*' -exec rm {} \;
+else
+	rm *~ ~\$*
+fi
+
