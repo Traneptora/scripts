@@ -1,4 +1,5 @@
 #!/bin/sh
 
-killall x11vnc
+daemon --stop --name=x11vnc
+
 
