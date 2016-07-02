@@ -14,7 +14,7 @@ case "$1" in
 	start)
 		MODE=start
 		shift
-		daemon --name="$COMM" --respawn --inherit --safe $@
+		daemon --name="$COMM" --respawn --inherit --safe -- $@
 		;;
 	stop)
 		MODE=stop
