@@ -1,4 +1,10 @@
 #!/bin/sh
+set -e
+
+if [ $# -le 0 ] ; then
+	echo "Usage: $(basename $0) <command>"
+	exit 1
+fi
 
 daemon --inherit --safe -- $@
 
