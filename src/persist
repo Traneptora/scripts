@@ -1,0 +1,30 @@
+#!/bin/sh
+
+usage(){
+	echo "Usage:" "$(basename $0)" "start|stop" "command"
+	exit 1
+}
+
+if [ $# -le 1 ] ; then
+	usage
+fi
+
+COMM="$2"
+case "$1" in
+	start)
+		MODE=start
+		shift
+		daemon --name="$COMM" --respawn --inherit --safe $@
+		;;
+	stop)
+		MODE=stop
+		shift
+		daemon --stop --name="$COMM"
+		;;
+	*)
+		usage
+		;;
+esac
+
+exit $?
+

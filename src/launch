@@ -1,0 +1,4 @@
+#!/bin/sh
+
+daemon --inherit --safe $@
+
