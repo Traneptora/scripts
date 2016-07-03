@@ -1,8 +1,9 @@
 #!/bin/sh
 set -e
+set -x
 
-if [ "$1" = "-r" ] || [ "$1" = "--recursive" ] ; then
-	find -name '*~' -or -name '~$*' -exec rm -f {} \;
+if [ "$1" == "-r" -o "$1" == "--recursive" ] ; then
+	find -name '*~' -or -name '~$*' | parallel rm -f {}
 else
 	rm -f *~ ~\$*
 fi
