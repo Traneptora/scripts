@@ -1,6 +1,5 @@
 #!/bin/sh
 set -e
-set -x
 
 if [ "$1" == "-r" -o "$1" == "--recursive" ] ; then
 	find -name '*~' -or -name '~$*' | parallel rm -f {}
