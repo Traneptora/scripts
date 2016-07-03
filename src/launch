@@ -7,5 +7,7 @@ if [ $# -le 0 ] ; then
 fi
 
 mkdir -p ~/.log/
-daemon --inherit --safe -o ~/.log/launch-"$1".log -D "$PWD" -- $@
+daemon --inherit --safe -o ~/.log/launch-"$1".log -D "$PWD" -- $@ || ( echo "Failed to launch." && exit 2 )
+echo "Successfully launched. Output is appended to ~/.log/launch-$1.log"
+exit 0
 
