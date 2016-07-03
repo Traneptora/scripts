@@ -15,7 +15,7 @@ case "$1" in
 		MODE=start
 		shift
 		mkdir -p ~/.log/
-		daemon --name="$COMM" --respawn --inherit --safe -o ~/.log/persist-"$COMM".log -- $@
+		daemon --name="$COMM" --respawn --inherit --safe -o ~/.log/persist-"$COMM".log -D "$PWD" -- $@
 		;;
 	stop)
 		MODE=stop

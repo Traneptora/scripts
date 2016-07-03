@@ -7,5 +7,5 @@ if [ $# -le 0 ] ; then
 fi
 
 mkdir -p ~/.log/
-daemon --inherit --safe -o ~/.log/launch-"$1".log -- $@
+daemon --inherit --safe -o ~/.log/launch-"$1".log -D "$PWD" -- $@
 
