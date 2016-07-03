@@ -6,5 +6,6 @@ if [ $# -le 0 ] ; then
 	exit 1
 fi
 
-daemon --inherit --safe -- $@
+mkdir -p ~/.log/
+daemon --inherit --safe -o ~/.log/launch-"$1".log -- $@
 
