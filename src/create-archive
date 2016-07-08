@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+if [ ! -d "$1" ] ; then
+	lz4 -z "$1" "$1".lz4
+	exit 0
+fi
+
+nam=$(echo "$1" | sed 's:/*$::')
+
+exsorttar "$nam".tar.lz4 --lz4 "$nam"
+
+du -ms "$nam.tar.lz4"
+du -ms "$1"
+
