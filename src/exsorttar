@@ -27,6 +27,7 @@ for i; do
     fi
 done
 
+tarargs=()
 tarfile="$1"
 findargs=()
 filelist=()
@@ -48,6 +49,12 @@ for i; do
 		findargs+=("-path")
 		findargs+=("$j")
 		findargs+=("-and")
+	elif [ "$i" == "--lz4" ] ; then
+		tarargs+=("-I")
+		tarargs+=("lz4")
+	elif [[ "$i" =~ ^--tarargs=.+$ ]]; then
+		j="$(echo "$i" | sed 's/^--tarargs=\(.*\)$/\1/')"
+		tarargs+=("$j")
 	elif [ ! "$i" = "$tarfile" ] ; then
 		filelist+=("$i")
 	fi
@@ -64,6 +71,6 @@ printfilelist(){
 if [ "$tarfile" = "--no-tar" ] ; then
 	printfilelist
 else
-	tar --no-recursion -T <( printfilelist ) -cvf "$tarfile"
+	tar --no-recursion -T <( printfilelist ) ${tarargs[@]} -cvf "$tarfile"
 fi
 
