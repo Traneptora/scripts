@@ -56,7 +56,7 @@ foundfirst=false
 
 # parse the arguments
 for i; do
-	if !$foundfirst; then
+	if ! $foundfirst; then
 		if [[ "$i" =~ ^--findargs=.+$ ]] ; then
 			j="$(echo "$i" | sed 's/^--findargs=\(.*\)$/\1/')"
 			findargs+=("$j")
@@ -80,7 +80,7 @@ for i; do
 		fi
 	fi
 	if $foundfirst; then
-		if !$notar && [ "$tarfile" == "" ] ; then
+		if ! $notar && [ "$tarfile" == "" ] ; then
 			tarfile="$i"
 		elif [ "$i" != "$tarfile" ] ; then
 			filelist+=("$i")
@@ -92,7 +92,7 @@ for i; do
 done
 
 # what if they don't give us anything?
-if !$notar && [ -z "$tarfile" ]; then
+if ! $notar && [ -z "$tarfile" ]; then
 	echo "Error: no archive name on command line, and no --no-tar."
 	echo ""
 	usage 1
@@ -109,20 +109,20 @@ for f in ${filelist[@]}; do
 		echo "Error: $f: no such file or directory"
 		exit 1
 	fi
-fi
+done
 
 # Give them time to Ctrl+C
 if $foundminus; then sleep 1; fi
 	
 # This failsafe works especially well at detecting when people forgot the archive name and jumped right to a list of dirs.
-if !$notar && [ -d "$tarfile" ] ; then
+if ! $notar && [ -d "$tarfile" ] ; then
 	echo "Tar archive, $tarfile, is currently a directory."
 	echo "Did you forget to add the archive name?"
 	exit 1
 fi
 
 # Allow the user to take back typos. Does not stop block devices because that's just annoying.
-if !$force && !$notar && [ -f "$tarfile" ]; then
+if ! $force && ! $notar && [ -f "$tarfile" ]; then
 	echo "Tar archive, $tarfile, already exists. Overwrite? [y/N]: "
 	read line
 	if ! [[ "$line" =~ ^y|Y ]]; then
