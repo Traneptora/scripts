@@ -1,0 +1,15 @@
+#!/bin/bash
+set -e
+
+COMM="$(basename "$1")"
+LOG=~/.log/launch-"$COMM".log
+
+clup() {
+	lz4 -9 -z "$LOG" - 2>~/.log/launch-"$COMM"-lz4status.log >>"$LOG".lz4
+	rm -f "$LOG"
+}
+
+trap clup EXIT
+
+$@
+

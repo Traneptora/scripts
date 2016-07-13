@@ -1,4 +1,5 @@
-#!/bin/sh
+#!/bin/bash
+set -e
 
 usage(){
 	echo "Usage:" "$(basename $0)" "start|stop" "command"
@@ -9,15 +10,16 @@ if [ $# -le 1 ] ; then
 	usage
 fi
 
-COMM="$2"
+COMM="$(basename "$2")"
+LOG=~/.log/launch-"$COMM".log
 case "$1" in
 	start)
 		MODE=start
 		shift
 		mkdir -p ~/.log/
-		daemon --name="$COMM" --respawn --inherit --safe -o ~/.log/persist-"$COMM".log -D "$PWD" -- $@
+		daemon --name="$COMM" --respawn --inherit --safe -o ~/.log/persist-"$COMM".log -D "$PWD" -- persist-wrapper $@
 		if [ $? == 0 ] ; then
-			echo "Successfully launched. Output is appended to ~/.log/persist-$1.log"
+			echo "Successfully launched. Output is appended to ~/.log/persist-$COMM.log"
 			exit 0
 		else
 			echo "Failed to launch."
@@ -27,8 +29,17 @@ case "$1" in
 	stop)
 		MODE=stop
 		shift
+		if ! daemon --running --name="$COMM"; then
+			echo "Not running!"
+			exit 1
+		fi
+		PCOMM="pgrep -f '^daemon --name=$COMM'"
+		pidlist=()
+		while pidlist+=($(sh -c "$PCOMM" | xargs pgrep -P)); do
+			PCOMM="$PCOMM | xargs pgrep -P"
+		done
 		daemon --stop --name="$COMM"
-		if [ $? == 0 ] ; then
+		if kill ${pidlist[@]} 2>/dev/null; then
 			echo "Successfully stopped."
 			exit 0
 		else

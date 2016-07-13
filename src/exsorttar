@@ -51,7 +51,7 @@ for i; do
 		findargs+=("-and")
 	elif [ "$i" == "--lz4" ] ; then
 		tarargs+=("-I")
-		tarargs+=("lz4")
+		tarargs+=('lz49')
 	elif [[ "$i" =~ ^--tarargs=.+$ ]]; then
 		j="$(echo "$i" | sed 's/^--tarargs=\(.*\)$/\1/')"
 		tarargs+=("$j")
