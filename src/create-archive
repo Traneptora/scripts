@@ -8,8 +8,7 @@ fi
 
 nam=$(echo "$1" | sed 's:/*$::')
 
-exsorttar "$nam".tar.lz4 --lz4 "$nam"
+exsorttar --lz4 "$nam".tar.lz4 "$nam"
 
 du -ms "$nam.tar.lz4"
 du -ms "$1"
-
