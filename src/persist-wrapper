@@ -5,7 +5,10 @@ COMM="$(basename "$1")"
 LOG=~/.log/persist-"$COMM".log
 
 clup() {
-	lz4 -9 -z "$LOG" - 2>~/.log/persist-"$COMM"-lz4status.log >>"$LOG".lz4
+	echo >>"$LOG"
+	echo "--------" >>"$LOG"
+	echo >>"$LOG"
+	lz4 -9 -z - - <"$LOG" 2>~/.log/persist-"$COMM"-lz4status.log >>"$LOG".lz4
 	rm -f "$LOG"
 }
 
