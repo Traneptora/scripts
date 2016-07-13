@@ -2,63 +2,147 @@
 set -e
 
 usage(){
-	echo "Usage:" "$(basename $0)" "[archive.tar] [switches]... file_or_directory..."
-	echo "      " "$(basename $0)" "--no-tar [switches]... file_or_directory..."; echo
-	echo "exsorttar will take a list of files and directories and recurse through with the find command."; echo
-	echo "It will create a tar archive with directories first (sorted by name, starting with the top directories), followed by regular files (sorted by file extension, then by filename, then by directory name), followed by everything else (including symbolic links, etc.)"; echo
-	echo "Pass --help or -h or -? or -help to print this message."
-	echo "Pass --no-tar as the archive name to not create an archive, only print the list."
-	echo "Pass - as the archive name to write the archive to standard out."
-	echo "Pass --findargs=something to pass \"something\" as an argument to find."
-	echo "Pass --exclude=pattern to ignore any path with the given pattern."
-	echo "	" "Example: --exclude='*.git*'"
-	echo "Note: The tar archive will be uncompressed. Write the archive to standard out and filter using your favorite compression program to create a compressed archive on the fly."
-	echo "Warning: Careful with directory names starting with a - as this may mess up find."
-	exit 1
+	echo "Usage:" "$(basename $0) [options] [archive.tar] file_or_directory..."
+	echo
+	echo "exsorttar will take a list of files and directories and recurse through with the find command."
+	echo
+	echo "It will create a tar archive with directories first (sorted by name, starting with the top directories), followed by regular files (sorted by file extension, then by filename, then by directory name), followed by everything else (including symbolic links, etc.)"
+	echo ""
+	echo "Options:"
+	echo "    -h,-?,--help            Print this help message."
+	echo "    --no-tar                Do not create an archive."
+	echo "                            Instead, print the file list in order to standard out."
+	echo "    --findarg=<findargs>    Add <findarg> as an argument to the find command."
+	echo "                            You may specify --findarg multiple times to add multiple arguments."
+	echo "    --exclude=<pattern>     Ignore any path with the given pattern."
+	echo "	                          Example: --exclude='*.git*'"
+	echo "                            You may specify --exclude multiple times to exclude multiple paths."
+	echo "    --tararg=<tararg>       Add <tararg> as an argument to the tar command."
+	echo "                            You may specify --tararg multiple times to add multiple arguments."
+	echo "                            Example: --tararg=-z"
+	echo "    --lz4                   Compress the tar archive with lz4 HC (requires the lz49 script)."
+	echo "    --force                 Overwrite regular files without asking."
+	echo ""
+	echo "You are required to give the tar archive filename unless --no-tar is specified."
+	echo "Pass '-' as the archive name to write the archive to standard out."
+	echo "The tar archive will be uncompressed unless --lz4 is specified. If you want a compressed archive, you can write the archive to standard out and filter using your favorite compression program to create a compressed archive on the fly."
+	echo "You could also use, say, --tararg=--xz to compress the archive with xz."
+	echo ""
+	echo "Note: Careful with directory names starting with a - or other odd things as this may mess up find."
+	exit $1
 }
 
+# people like not having to type --help again
 if [ $# -le 1 ] ; then
-	usage
+	usage 1
 fi
 
+# check all the options for --help first
 for i; do
-    if [[ "$i" =~ ^--help|-h|-\?|-help$ ]] ; then
-    	usage
+    if [[ "$i" =~ ^--help|-h|-\?$ ]] ; then
+    	usage 0
     fi
 done
 
+# our parameters
+force=false
+lz4=false
+notar=false
+tarfile=""
 tarargs=()
-tarfile="$1"
 findargs=()
 filelist=()
+foundfirst=false
 
+# parse the arguments
 for i; do
-	if [ "$i" = "--no-tar" ] ; then
-		tarfile="--no-tar"
-		break
+	if !$foundfirst; then
+		if [[ "$i" =~ ^--findargs=.+$ ]] ; then
+			j="$(echo "$i" | sed 's/^--findargs=\(.*\)$/\1/')"
+			findargs+=("$j")
+		elif [[ "$i" =~ ^--exclude=.+$ ]]; then
+			j="$(echo "$i" | sed 's/^--exclude=\(.*\)$/\1/')"
+			findargs+=("-not")
+			findargs+=("-path")
+			findargs+=("$j")
+			findargs+=("-and")
+		elif [[ "$i" =~ ^--tarargs=.+$ ]]; then
+			j="$(echo "$i" | sed 's/^--tarargs=\(.*\)$/\1/')"
+			tarargs+=("$j")
+		elif [ "$i" == "--lz4" ] ; then
+			lz4=true
+		elif [ "$i" == "--force" ] ; then
+			force=true
+		elif [ "$i" == "--no-tar" ] ; then
+			notar=true
+		else
+			foundfirst=true
+		fi
+	fi
+	if $foundfirst; then
+		if !$notar && [ "$tarfile" == "" ] ; then
+			tarfile="$i"
+		elif [ "$i" != "$tarfile" ] ; then
+			filelist+=("$i")
+		else
+			echo "$i is the same as the archive to create."
+			exit 1
+		fi
 	fi
 done
 
-for i; do
-	if [[ "$i" =~ ^--findargs=.+$ ]] ; then
-		j="$(echo "$i" | sed 's/^--findargs=\(.*\)$/\1/')"
-		findargs+=("$j")
-	elif [[ "$i" =~ ^--exclude=.+$ ]]; then
-		j="$(echo "$i" | sed 's/^--exclude=\(.*\)$/\1/')"
-		findargs+=("-not")
-		findargs+=("-path")
-		findargs+=("$j")
-		findargs+=("-and")
-	elif [ "$i" == "--lz4" ] ; then
-		tarargs+=("-I")
-		tarargs+=('lz49')
-	elif [[ "$i" =~ ^--tarargs=.+$ ]]; then
-		j="$(echo "$i" | sed 's/^--tarargs=\(.*\)$/\1/')"
-		tarargs+=("$j")
-	elif [ ! "$i" = "$tarfile" ] ; then
-		filelist+=("$i")
+# what if they don't give us anything?
+if !$notar && [ -z "$tarfile" ]; then
+	echo "Error: no archive name on command line, and no --no-tar."
+	echo ""
+	usage 1
+fi
+
+# doublecheck the file arguments
+foundminus=false
+for f in ${filelist[@]}; do 
+	if [[ "$f" =~ ^- ]] ; then
+		echo "Warning: Interpreting $f as a file/directory name. Press Ctrl+C if you didn't mean this."
+		foundminus=true
 	fi
-done
+	if [ ! -e "$f" ] ; then
+		echo "Error: $f: no such file or directory"
+		exit 1
+	fi
+fi
+
+# Give them time to Ctrl+C
+if $foundminus; then sleep 1; fi
+	
+# This failsafe works especially well at detecting when people forgot the archive name and jumped right to a list of dirs.
+if !$notar && [ -d "$tarfile" ] ; then
+	echo "Tar archive, $tarfile, is currently a directory."
+	echo "Did you forget to add the archive name?"
+	exit 1
+fi
+
+# Allow the user to take back typos. Does not stop block devices because that's just annoying.
+if !$force && !$notar && [ -f "$tarfile" ]; then
+	echo "Tar archive, $tarfile, already exists. Overwrite? [y/N]: "
+	read line
+	if ! [[ "$line" =~ ^y|Y ]]; then
+		echo "Not overwriting $tarfile."
+		exit 1
+	fi
+fi
+
+# this uses the lz49 script. It's essentially a wrapper for lz4 with -9 attached, because tar -I doesn't let us pass options.
+if $lz4; then
+	if ! lz49 -z - - </dev/null >/dev/null 2>/dev/null; then
+		echo "lz49 not found in PATH."
+		echo "Add the lz49 script to use --lz4."
+		exit 2
+	fi
+	tarargs+=("-I")
+	tarargs+=("lz49")
+fi
+
+# alright, let's get to it!
 
 sortbyext(){
     sed 's_^\(\([^/]*/\)*\)\(.*\)\(\.[^\./]*\)$_\4/\3/\1_' | sed 's_^\(\([^/]*/\)*\)\([^\./]\+\)$_/\3/\1_'  | sort -t/ -k1,1 -k2,2 -k3,3 | sed 's_^\([^/]*\)/\([^/]*\)/\(.*\)$_\3\2\1_'
@@ -68,9 +152,9 @@ printfilelist(){
 	cat <(find ${filelist[@]} ${findargs[@]} -type d | sort -t/) <(find ${filelist[@]} ${findargs[@]} -type f | sortbyext) <(find ${filelist[@]} ${findargs[@]} -not -type d -and -not -type f | sort -t/)
 }
 
-if [ "$tarfile" = "--no-tar" ] ; then
+if $notar; then
 	printfilelist
 else
-	tar --no-recursion -T <( printfilelist ) ${tarargs[@]} -cvf "$tarfile"
+	tar --no-recursion -T <(printfilelist) ${tarargs[@]} -cvf "$tarfile"
 fi
 
