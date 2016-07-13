@@ -10,6 +10,25 @@ if [ $# -le 1 ] ; then
 	usage
 fi
 
+if ! pgrep --help </dev/null >/dev/null 2>/dev/null; then
+	echo "\"pgrep\" not found in your PATH."
+	exit 1
+fi
+
+
+if ! daemon --help </dev/null >/dev/null 2>/dev/null; then
+	echo "\"daemon\" not found in your PATH."
+	exit 1
+fi
+
+if ! launch-wrapper </dev/null >/dev/null 2>/dev/null; then
+	echo "\"launch-wrapper\" not found in your PATH."
+	echo "Did you remember to install that as well?"
+	exit 1
+fi
+
+
+
 COMM="$(basename "$2")"
 LOG=~/.log/launch-"$COMM".log
 case "$1" in
@@ -51,6 +70,5 @@ case "$1" in
 		usage
 		;;
 esac
-
-exit $?
+exit 0
 

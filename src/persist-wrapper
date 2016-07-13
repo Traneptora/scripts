@@ -1,6 +1,15 @@
 #!/bin/bash
 set -e
 
+if [ $# -eq 0 ] ; then
+	if [ -t 2 ] ; then
+		>&2 echo "Please don't dryrun this from a terminal. Use \"persist\"."
+		exit 1
+	else
+		exit 0
+	fi
+fi
+
 COMM="$(basename "$1")"
 LOG=~/.log/persist-"$COMM".log
 

@@ -6,9 +6,21 @@ if [ $# -le 0 ] ; then
 	exit 1
 fi
 
+if ! daemon --help </dev/null >/dev/null 2>/dev/null; then
+	echo "\"daemon\" not found in your PATH."
+	exit 1
+fi
+
+if ! launch-wrapper </dev/null >/dev/null 2>/dev/null; then
+	echo "\"launch-wrapper\" not found in your PATH."
+	echo "Did you remember to install that as well?"
+	exit 1
+fi
+
 COMM="$(basename "$1")"
 LOG=~/.log/launch-"$COMM".log
 mkdir -p ~/.log/
 daemon --inherit --safe -o "$LOG" -D "$PWD" -- launch-wrapper $@ || ( echo "Failed to launch." && exit 2 )
 echo "Successfully launched. Output is appended to ~/.log/launch-$COMM.log.lz4"
 exit 0
+
