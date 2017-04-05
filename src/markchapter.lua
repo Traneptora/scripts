@@ -8,7 +8,7 @@ mp.register_script_message("mark-chapter", function()
 	-- the script will bork if we don't already have chapters
 	-- this special case just creates one chapter
 	if chapter_count == 0 then
-		all_chapters[1] = {title=(time_pos .. ""), time=time_pos}
+		all_chapters[1] = {title=(tostring(time_pos)), time=time_pos}
 
 		-- We just set it to zero here so when we add 1 later it ends up as 1
 		-- otherwise it's probably "nil"
@@ -31,7 +31,7 @@ mp.register_script_message("mark-chapter", function()
 		end
 
 		-- again the +2 is because we want to insert the chapter as a new one after the "current one"
-		all_chapters[curr_chapter+2] = {title=(time_pos .. ""), time=time_pos}
+		all_chapters[curr_chapter+2] = {title=(tostring(time_pos)), time=time_pos}
 	end
 
 
