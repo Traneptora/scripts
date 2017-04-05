@@ -64,16 +64,16 @@ foundfirst=false
 for i; do
 	if ! $foundfirst; then
 		if [[ "$i" =~ ^--findargs=.+$ ]] ; then
-			j="$(echo "$i" | sed 's/^--findargs=\(.*\)$/\1/')"
+			j="$(printf %s "$i" | sed 's/^--findargs=\(.*\)$/\1/')"
 			findargs+=("$j")
 		elif [[ "$i" =~ ^--exclude=.+$ ]]; then
-			j="$(echo "$i" | sed 's/^--exclude=\(.*\)$/\1/')"
+			j="$(printf %s "$i" | sed 's/^--exclude=\(.*\)$/\1/')"
 			findargs+=("-not")
 			findargs+=("-path")
 			findargs+=("$j")
 			findargs+=("-and")
 		elif [[ "$i" =~ ^--tarargs=.+$ ]]; then
-			j="$(echo "$i" | sed 's/^--tarargs=\(.*\)$/\1/')"
+			j="$(printf %s "$i" | sed 's/^--tarargs=\(.*\)$/\1/')"
 			tarargs+=("$j")
 		elif [ "$i" == "--lz4" ] ; then
 			lz4=true
@@ -131,7 +131,7 @@ if $foundminus; then sleep 1; fi
 # Allow the user to take back typos. Does not stop block devices because that's just annoying.
 if ! $force && ! $notar && [ -f "$tarfile" ]; then
 	if [ -t 0 ] ; then
-		echo "Tar archive, $tarfile, already exists. Overwrite? [y/N]: "
+		echo -n "Tar archive, $tarfile, already exists. Overwrite? [y/N]: "
 		read line
 		if ! [[ "$line" =~ ^y|Y ]]; then
 			echo "Not overwriting $tarfile."
