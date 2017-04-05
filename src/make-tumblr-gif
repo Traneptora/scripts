@@ -54,11 +54,10 @@ height=$(extract height)
 duration=$(extract duration | tr -d '"')
 rate=$(extract r_frame_rate | tr '"' ' ' | bc)
 halfrate=$(echo "($rate)*0.5" | bc)
-framerate="-r $halfrate"
+framerate="-vf framestep=2 -r $halfrate"
 if [ "$3" = "--fullrate" ] ; then
 	framerate=""
 fi
-
 scale=1
 scalehigh=1
 scalelow=1
@@ -66,8 +65,10 @@ foundlowerbound=0
 
 fractionDone(){
 	while read line; do
-		timedone=$(echo $line | tr ' ' '\n' | grep time= | sed 's/time=//' | awk -F: '{ print ($1 * 3600) + ($2 * 60) + $3 }')
-		printf "%s%%\n" $(echo "scale=4;$timedone/$duration*100" | bc)
+		if [ -n "$duration" ] && ! [ "$duration" = 'N/A' ] ; then
+			timedone=$(echo $line | tr ' ' '\n' | grep time= | sed 's/time=//' | awk -F: '{ print ($1 * 3600) + ($2 * 60) + $3 }')
+			printf "%s%%\n" $(echo "scale=4;$timedone/$duration*100" | bc)
+		fi
 	done
 }
 
@@ -76,12 +77,14 @@ creategif(){
 	newheight=$(echo "scale=0;" $height \* $scale | bc)
 	
 	echo "Testing Size: " ${newwidth%.*}x${newheight%.*}
-	ffmpeg -y -i "$inputfile" -map 0:v -pix_fmt yuv420p -s ${newwidth%.*}x${newheight%.*} $framerate -c ffv1 -f matroska $mkvfile 2>&1 | stdbuf -o0 tr '\r' '\n' | grep --line-buffered "^frame" | fractionDone | while read line; do echo -n "Scaling Video... "; echo $line; done | stdbuf -o0 tr '\n' '\r'
+	ffmpeg -y -i "$inputfile" -map v -pix_fmt bgr0 -s ${newwidth%.*}x${newheight%.*} $framerate -c ffv1 -f matroska $mkvfile 2>&1 | stdbuf -o0 tr '\r' '\n' | grep --line-buffered "^frame" | fractionDone | while read line; do echo -n "Scaling Video... "; echo $line; done | stdbuf -o0 tr '\n' '\r'
 	echo -n "Scaling Video... Done. Generating Palette... "
-	ffmpeg -y -i $mkvfile -vf palettegen -c png -f image2 $palettefile >/dev/null 2>&1
-	echo "Done. " | tr '\n' '\r'
-	ffmpeg -y -i $mkvfile -i $palettefile -lavfi paletteuse -c gif -f gif $giffile 2>&1 | stdbuf -o0 tr '\r' '\n' | grep --line-buffered "^frame" | fractionDone | while read line; do echo -n "Scaling Video... Done. Generating Palette... Done. Generating GIF... "; echo $line; done | stdbuf -o0 tr '\n' '\r'
-	echo "Scaling Video... Done. Generating Palette... Done. Generating GIF... Done.        "
+	ffmpeg -y -i $mkvfile -vf palettegen=max_colors=96 -c png -f image2 $palettefile >/dev/null 2>&1
+	echo -ne 'Done. \r'
+	ffmpeg -y -i $mkvfile -i $palettefile -lavfi paletteuse=dither=bayer:bayer_scale=3 -c gif -f gif $giffile 2>&1 | stdbuf -o0 tr '\r' '\n' | grep --line-buffered "^frame" | fractionDone | while read line; do echo -n "Scaling Video... Done. Generating Palette... Done. Generating GIF... "; echo $line; done | stdbuf -o0 tr '\n' '\r'
+	echo -n "Scaling Video... Done. Generating Palette... Done. Generating GIF... Done. Crushing GIF... "
+	gifsicle --batch --unoptimize --optimize=3 --optimize=keep-empty "$giffile"
+	echo 'Done.'
 }
 
 adjustscale(){
@@ -116,4 +119,5 @@ while [ $(echo "$scale < 1" | bc) -ne 0 ] && [ $(filesize $giffile) -lt 1900000 
 done
 
 mv $giffile "$outputfile"
+
 
