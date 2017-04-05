@@ -1,0 +1,204 @@
+#!/bin/bash
+
+VIDEOSTREAM="v"
+AUDIOSTREAM="a:0"
+VIDEOINPUT=""
+VIDEOOUTPUT=""
+ARGSDONE="no"
+SUBS="no"
+SID=0
+START=""
+END=""
+ENCODER="libx264"
+BITRATE="vbr"
+FORMAT="yuv420p10le"
+FFOPTS=""
+FILTER=""
+
+process_option(){
+	NAME="$1"
+	VALUE="$2"
+	case "$NAME" in
+		subs)
+			if [ "x$VALUE" = "xyes" ] ; then
+				SUBS="yes"
+			elif [ "x$VALUE" = "ximage" ] ; then
+				SUBS="image"
+			fi
+			;;
+		aid)
+			AUDIOSTREAM="a:$VALUE"
+			;;
+		end)
+			END="$VALUE"
+			;;
+		start)
+			START="$VALUE"
+			;;
+		bitrate)
+			BITRATE="$VALUE"
+			;;
+		codec)
+			case "$VALUE" in
+				nvenc)
+					ENCODER="h264_nvenc"
+					FORMAT="yuv420p"
+					;;
+				h264)
+					ENCODER="h264_nvenc"
+					FORMAT="yuv420p"
+					;;
+				h264_nvenc)
+					ENCODER="h264_nvenc"
+					FORMAT="yuv420p"
+					;;
+				hevc)
+					ENCODER="hevc_nvenc"
+					FORMAT="p010le"
+					;;
+				hevc_nvenc)
+					ENCODER="hevc_nvenc"
+					FORMAT="p010le"
+					;;
+				x264)
+					ENCODER="libx264"
+					FORMAT="yuv420p10le"
+					;;
+				libx264)
+					ENCODER="libx264"
+					FORMAT="yuv420p10le"
+					;;
+				x265)
+					ENCODER="libx265"
+					FORMAT="yuv420p10le"
+					;;
+				libx265)
+					ENCODER="libx265"
+					FORMAT="yuv420p10le"
+					;;
+				*)
+					ENCODER="$VALUE"
+					FORMAT="yuv420p"
+					;;
+			esac
+			;;
+		sid)
+			SID="$VALUE"
+			;;
+		ffopts)
+			FFOPTS="$VALUE"
+			;;
+		filter)
+			FILTER="$VALUE"
+			;;
+		*)
+			echo "Invalid option: $NAME=$VALUE" >&2
+			exit 1
+			;;
+	esac
+}
+
+for arg; do
+	if [[ "x$ARGSDONE" != "xyes" && "x$arg" =~ ^x-- ]] ; then
+		if [ "x$arg" = "x--" ] ; then
+			ARGSDONE="yes"
+		else
+			process_option "$(sed 's/^--\([^=]*\)=\(.*\)$/\1/' <<<"$arg")" "$(sed 's/^--\([^=]*\)=\(.*\)$/\2/' <<<"$arg")"
+		fi
+	elif [ -z "$VIDEOINPUT" ] ; then
+		VIDEOINPUT="$arg"
+	elif [ -z "$VIDEOOUTPUT" ] ; then
+		VIDEOOUTPUT="$arg"
+	else
+		echo "Invalid trailing argument: $arg" >&2
+		exit 1
+	fi
+done
+
+if [[ -z "${VIDEOINPUT}" || -z "${VIDEOOUTPUT}" ]] ; then
+	echo "Provide both a video input and output." >&2
+	exit 1
+fi
+
+if [[ -z "$START" || -z "$END" ]] ; then
+	echo "Need both a start and end timecode." >&2
+	exit 1
+fi
+
+if [ -z "$FILTER" ] ; then
+	FILTER="format=${FORMAT},setpts=PTS-STARTPTS"
+else
+	FILTER="${FILTER},format=${FORMAT},setpts=PTS-STARTPTS"
+fi
+
+time_duration_toseconds() {
+	awk -F: '{ n = 1; for (i = NF; i > 0; i--) { out = $i * n + out; n = n * 60 } print out }'
+}
+
+STARTSECS="$(time_duration_toseconds <<<"$START")"
+ENDSECS="$(time_duration_toseconds <<<"$END")"
+
+DURATION="$(awk '{ print $2 - $1 }' <<<"$STARTSECS $ENDSECS")"
+
+subslink=".clipvideo_subsymlink"
+
+if [ "x$SUBS" = "xyes" ] ; then
+	rm -f "$subslink"
+	ln -s "$VIDEOINPUT" "$subslink"
+	FILTER="subtitles=filename=$subslink:si=$SID,$FILTER"
+fi
+
+FORMATOPTS=""
+
+if [[ "$VIDEOOUTPUT" =~ \.(mkv|MKV)$ ]] ; then
+	AUDIOOPTS="-c:a libopus -b:a 128k"
+	FORMATOPTS="-live 1"
+elif [[ "$VIDEOOUTPUT" =~ \.(ts|TS)$ ]] ; then
+	AUDIOOPTS="-c:a libopus -b:a 128k"
+elif [[ "$VIDEOOUTPUT" =~ \.(mp4|MP4)$ ]] ; then
+	FORMATOPTS="-movflags +faststart"
+	AUDIOOPTS="-c:a aac -b:a 128k"
+else
+	AUDIOOPTS="-c:a libvorbis -q:a 5"
+fi
+
+if [ "x$BITRATE" = "xvbr" ] ; then
+	case "$ENCODER" in
+		libx26?)
+			BITRATEOPTS="-crf:v 18"
+			;;
+		*)
+			BITRATEOPTS="-global_quality:v 15"
+			;;
+	esac
+else
+	BITRATEOPTS="-b:v $BITRATE"
+fi
+
+
+case "$ENCODER" in
+	h264_nvenc)
+		VIDEOOPTS="-c:v h264_nvenc -gpu:v 0 -preset:v slow -profile:v high -spatial-aq:v 1 -qmin:v 0 -qmax:v 69"
+		;;
+	libx264)
+		VIDEOOPTS="-c:v libx264 -preset:v slow"
+		;;
+	libx265)
+		VIDEOOPTS="-c:v libx265 -preset:v slow"
+		;;
+	hevc_nvenc)
+		VIDEOOPTS="-c:v hevc_nvenc -gpu:v 0 -preset:v slow -profile:v main10 -tier:v 1 -rc-lookahead:v 54 -surfaces:v 64 -spatial_aq:v 1"
+		;;
+	*)
+		VIDEOOPTS="-c:v $ENCODER"
+		;;
+esac
+
+if [ "x$SUBS" = "ximage" ] ; then
+	ffmpeg -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -lavfi "[0:v][0:s:${SID}]overlay,${FILTER}[v]" -map "[v]" -map "$AUDIOSTREAM" -t "$DURATION" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+else
+	ffmpeg -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -t "$DURATION" -vf "$FILTER" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+fi
+
+rm -f "$subslink"
+
