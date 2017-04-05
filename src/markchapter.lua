@@ -1,9 +1,9 @@
 -- usage at input.conf, add e.g. "M script_message mark-chapter"
 mp.register_script_message("mark-chapter", function()
-	time_pos = mp.get_property_number("time-pos")
-	curr_chapter = mp.get_property_number("chapter")
-	chapter_count = mp.get_property_number("chapter-list/count")
-	all_chapters = mp.get_property_native("chapter-list")
+	local time_pos = mp.get_property_number("time-pos")
+	local curr_chapter = mp.get_property_number("chapter")
+	local chapter_count = mp.get_property_number("chapter-list/count")
+	local all_chapters = mp.get_property_native("chapter-list")
 
 	-- the script will bork if we don't already have chapters
 	-- this special case just creates one chapter
