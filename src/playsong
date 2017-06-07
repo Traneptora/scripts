@@ -1,0 +1,16 @@
+#!/bin/sh
+set -e
+
+if [ -z "$1" ] ; then
+	echo "Usage: $0 song_name"
+	echo "Remember that this is just a guess."
+	exit 1
+fi
+
+song="$1"
+shift
+
+# You need to stop for a moment and just admire this
+# This is the most incredibly beautiful piece of crap I've seen in a while
+python -c "import urllib.parse; print('https://www.youtube.com/results?%s' % urllib.parse.urlencode({'search_query' : '$song'}))" | xargs curl -s | grep -E '^.*?"\/watch\?v=([0-9a-zA-Z_]*)".*$' | sed -r 's/^.*?"\/watch\?v=([0-9a-zA-Z_]*)".*$/\1/' | cat | head -n1 | xargs printf "https://www.youtube.com/watch?v=%s" | xargs mpv --no-video "$@"
+
