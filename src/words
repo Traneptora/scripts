@@ -7,7 +7,7 @@ while true; do
 		numw=1
 	fi
 	for i in $(seq "${numw}"); do
-		printf "%s " "$(randomword)"
+		printf "%s " "$(randomword | sed "s/'s\$//" )"
 	done
 	echo
 	sleep 1
