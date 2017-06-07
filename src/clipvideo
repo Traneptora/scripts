@@ -20,10 +20,12 @@ process_option(){
 	VALUE="$2"
 	case "$NAME" in
 		subs)
-			if [ "x$VALUE" = "xyes" ] ; then
-				SUBS="yes"
+			if [ "x$VALUE" = "xhard" ] ; then
+				SUBS="hard"
 			elif [ "x$VALUE" = "ximage" ] ; then
 				SUBS="image"
+			elif [ "x$VALUE" = "xsoft" ] ; then
+				SUBS="soft"
 			fi
 			;;
 		aid)
@@ -42,15 +44,15 @@ process_option(){
 			case "$VALUE" in
 				nvenc)
 					ENCODER="h264_nvenc"
-					FORMAT="yuv420p"
+					FORMAT="nv12"
 					;;
 				h264)
 					ENCODER="h264_nvenc"
-					FORMAT="yuv420p"
+					FORMAT="nv12"
 					;;
 				h264_nvenc)
 					ENCODER="h264_nvenc"
-					FORMAT="yuv420p"
+					FORMAT="nv12"
 					;;
 				hevc)
 					ENCODER="hevc_nvenc"
@@ -91,17 +93,22 @@ process_option(){
 		filter)
 			FILTER="$VALUE"
 			;;
+		pause)
+			>&2 echo "Warning: Ignoring --pause"
+			;;
 		*)
-			echo "Invalid option: $NAME=$VALUE" >&2
+			>&2 echo "Invalid option: $NAME=$VALUE"
 			exit 1
 			;;
 	esac
 }
 
 for arg; do
-	if [[ "x$ARGSDONE" != "xyes" && "x$arg" =~ ^x-- ]] ; then
+	if [[ "x$ARGSDONE" != "xyes" && "$arg" =~ ^-- ]] ; then
 		if [ "x$arg" = "x--" ] ; then
 			ARGSDONE="yes"
+		elif [[ ! "$arg" =~ = ]] ; then
+			process_option "${arg#--}" "${arg#--}"
 		else
 			process_option "$(sed 's/^--\([^=]*\)=\(.*\)$/\1/' <<<"$arg")" "$(sed 's/^--\([^=]*\)=\(.*\)$/\2/' <<<"$arg")"
 		fi
@@ -142,7 +149,7 @@ DURATION="$(awk '{ print $2 - $1 }' <<<"$STARTSECS $ENDSECS")"
 
 subslink=".clipvideo_subsymlink"
 
-if [ "x$SUBS" = "xyes" ] ; then
+if [ "x$SUBS" = "xhard" ] ; then
 	rm -f "$subslink"
 	ln -s "$VIDEOINPUT" "$subslink"
 	FILTER="subtitles=filename=$subslink:si=$SID,$FILTER"
@@ -155,9 +162,11 @@ if [[ "$VIDEOOUTPUT" =~ \.(mkv|MKV)$ ]] ; then
 	FORMATOPTS="-live 1"
 elif [[ "$VIDEOOUTPUT" =~ \.(ts|TS)$ ]] ; then
 	AUDIOOPTS="-c:a libopus -b:a 128k"
+elif [[ "$VIDEOOUTPUT" =~ \.(nut|NUT)$ ]] ; then
+	AUDIOOPTS="-c:a libopus -b:a 128k"
 elif [[ "$VIDEOOUTPUT" =~ \.(mp4|MP4)$ ]] ; then
 	FORMATOPTS="-movflags +faststart"
-	AUDIOOPTS="-c:a aac -b:a 128k"
+	AUDIOOPTS="-c:a libfdk_aac -b:a 128k"
 else
 	AUDIOOPTS="-c:a libvorbis -q:a 5"
 fi
@@ -168,7 +177,7 @@ if [ "x$BITRATE" = "xvbr" ] ; then
 			BITRATEOPTS="-crf:v 18"
 			;;
 		*)
-			BITRATEOPTS="-global_quality:v 15"
+			BITRATEOPTS="-qp:v 15"
 			;;
 	esac
 else
@@ -195,9 +204,17 @@ case "$ENCODER" in
 esac
 
 if [ "x$SUBS" = "ximage" ] ; then
+	set -x
 	ffmpeg -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -lavfi "[0:v][0:s:${SID}]overlay,${FILTER}[v]" -map "[v]" -map "$AUDIOSTREAM" -t "$DURATION" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+	2>/dev/null set +x
+elif [ "x$SUBS" = "xsoft" ] ; then
+	set -x
+	ffmpeg -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -map s? -map t? -map d? -c copy -t "$DURATION" -vf "$FILTER" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+	2>/dev/null set +x
 else
+	set -x
 	ffmpeg -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -t "$DURATION" -vf "$FILTER" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+	2>/dev/null set +x
 fi
 
 rm -f "$subslink"

@@ -20,7 +20,7 @@ fi
 COMM="$(basename "$1")"
 LOG=~/.log/launch-"$COMM".log
 mkdir -p ~/.log/
-daemon --inherit --safe -o "$LOG" -D "$PWD" -- launch-wrapper $@ || ( echo "Failed to launch." && exit 2 )
+daemon --inherit --safe -o "$LOG" -D "$PWD" -- launch-wrapper "$@" || ( echo "Failed to launch." && exit 2 )
 echo "Successfully launched. Output is appended to ~/.log/launch-$COMM.log.lz4"
 exit 0
 

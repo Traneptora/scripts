@@ -36,7 +36,7 @@ case "$1" in
 		MODE=start
 		shift
 		mkdir -p ~/.log/
-		daemon --name="$COMM" --respawn --inherit --safe -o ~/.log/persist-"$COMM".log -D "$PWD" -- persist-wrapper $@
+		daemon --name="$COMM" --respawn --inherit --safe -o ~/.log/persist-"$COMM".log -D "$PWD" -- persist-wrapper "$@"
 		if [ $? == 0 ] ; then
 			echo "Successfully launched. Output is appended to ~/.log/persist-$COMM.log"
 			exit 0

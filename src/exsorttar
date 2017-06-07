@@ -27,7 +27,8 @@ usage(){
 	echo "                            You may specify --tararg multiple times to add multiple arguments."
 	echo "                            Example: --tararg=-z"
 	echo "    --lz4                   Compress the tar archive with lz4 HC (requires the lz49 script)."
-	echo "    --force                 Overwrite regular files without asking."
+	echo "    --force                 Don't ask questions before making decisions."
+	echo "                            This is particularly useful in a script, but not recommended for interactive use."
 	echo ""
 	echo "You are required to give the tar archive filename unless --no-tar is specified."
 	echo "Pass '-' as the archive name to write the archive to standard out."
@@ -81,6 +82,9 @@ for i; do
 			force=true
 		elif [ "$i" == "--no-tar" ] ; then
 			notar=true
+		elif [ "$i" == "--" ] ; then
+			foundfirst=true
+			continue
 		else
 			foundfirst=true
 		fi
@@ -97,12 +101,20 @@ for i; do
 	fi
 done
 
-# what if they don't give us anything?
+# what if they don't give us anything at all?
 if ! $notar && [ -z "$tarfile" ]; then
-	echo "Error: no archive name on command line, and no --no-tar."
+	echo "Error: No archive name on command line, and no --no-tar."
 	minorusage
 	exit 1
 fi
+
+# what if they don't give us anything to archive?
+if ! $notar && [ -z "${filelist[0]}" ]; then
+	echo "Error: No list of files provided. Provide '.' to archive the current directory."
+	minorusage
+	exit 1
+fi
+
 
 # This failsafe works especially well at detecting when people forgot the archive name and jumped right to a list of dirs.
 if ! $notar && [ -d "$tarfile" ] ; then
@@ -113,26 +125,22 @@ if ! $notar && [ -d "$tarfile" ] ; then
 fi
 
 # doublecheck the file arguments
-foundminus=false
-for f in ${filelist[@]}; do 
+# foundminus=false
+for f in "${filelist[@]}"; do 
 	if [[ "$f" =~ ^- ]] ; then
-		echo "Warning: Interpreting $f as a file/directory name. Press Ctrl+C if you didn't mean this."
-		foundminus=true
+		echo "Error: Interpreting $f as a file or directory name. This can break \`find\`. Use ./$f to supress this error."
+		exit 1
 	fi
 	if [ ! -e "$f" ] ; then
-		echo "Error: $f: no such file or directory"
+		echo "Error: $f: No such file or directory."
 		exit 1
 	fi
 done
 
-# Give them time to Ctrl+C
-if $foundminus; then sleep 1; fi
-
-# Allow the user to take back typos. Does not stop block devices because that's just annoying.
+# Allow the user to take back typos. Does not stop on devices because that's just annoying.
 if ! $force && ! $notar && [ -f "$tarfile" ]; then
 	if [ -t 0 ] ; then
-		echo -n "Tar archive, $tarfile, already exists. Overwrite? [y/N]: "
-		read line
+		read -p "Tar archive, $tarfile, already exists. Overwrite? [y/N]: " line
 		if ! [[ "$line" =~ ^y|Y ]]; then
 			echo "Not overwriting $tarfile."
 			exit 1
@@ -145,13 +153,13 @@ fi
 
 # this uses the lz49 script. It's essentially a wrapper for lz4 with -9 attached, because tar -I doesn't let us pass options.
 if $lz4; then
-	if ! lz49 -z - - </dev/null >/dev/null 2>/dev/null; then
-		echo "lz49 not found in PATH."
-		echo "Add the lz49 script to use --lz4."
+	if ! lz4 -9 -z - - </dev/null >/dev/null 2>/dev/null; then
+		echo "lz4 not found in PATH."
+		#echo "Add the lz49 script to use --lz4."
 		exit 2
 	fi
 	tarargs+=("-I")
-	tarargs+=("lz49")
+	tarargs+=("lz4 -9 -z")
 fi
 
 # alright, let's get to it!
@@ -161,12 +169,12 @@ sortbyext(){
 }
 
 printfilelist(){
-	cat <(find ${filelist[@]} ${findargs[@]} -type d | sort -t/) <(find ${filelist[@]} ${findargs[@]} -type f | sortbyext) <(find ${filelist[@]} ${findargs[@]} -not -type d -and -not -type f | sort -t/)
+	cat <(find "${filelist[@]}" "${findargs[@]}" -type d | sort -t/) <(find "${filelist[@]}" "${findargs[@]}" -type f | sortbyext) <(find "${filelist[@]}" "${findargs[@]}" -not -type d -and -not -type f | sort -t/)
 }
 
 if $notar; then
 	printfilelist
 else
-	tar --no-recursion -T <(printfilelist) ${tarargs[@]} -cvf "$tarfile"
+	tar --no-recursion -T <(printfilelist) "${tarargs[@]}" -cvf "$tarfile"
 fi
 

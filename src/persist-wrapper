@@ -17,6 +17,7 @@ clup() {
 	echo >>"$LOG"
 	echo "--------" >>"$LOG"
 	echo >>"$LOG"
+	touch "$LOG".lz4
 	cat <(lz4 -d "$LOG".lz4 - 2>~/.log/persist-"$COMM"-lz4status.log) "$LOG" | lz4 -z - - 2>>~/.log/persist-"$COMM"-lz4status.log >"$LOG".lz4.2
 	mv "$LOG".lz4.2 "$LOG.lz4"
 	rm -f "$LOG"
@@ -24,5 +25,6 @@ clup() {
 
 trap clup EXIT
 
-$@
+"$@"
+
 

@@ -1,11 +1,14 @@
 #!/bin/bash
 set -e
 
+exename="$0"
+
+
 finish() {
 	if [ $? -ne 0 ] ; then
 		echo "Some error occurred. :("
 	fi
-	rm -f $mkvfile
+	rm -f $nutfile
 	rm -f $palettefile
 	rm -f $datafile
 	rm -f $giffile
@@ -14,7 +17,7 @@ finish() {
 trap finish EXIT
 
 usage(){
-	echo "Usage:" $(basename $0) "input_video_file output_gif_file [--fullrate]"
+	printf "Usage:\n\t%s input_video_file output_gif_file [--fullrate]\n" "${exename##*/}"
 	echo
 	echo $(basename $0) "converts the input video to a GIF with size between 1.9 MB and 2.0 MB."
 	echo "2.0 MB is the tumblr GIF size limit, which is why this limit is useful."
@@ -30,12 +33,42 @@ fi
 datafile=$(mktemp)
 palettefile=$(mktemp)
 giffile=$(mktemp)
-mkvfile=$(mktemp)
+nutfile=$(mktemp)
 
-inputfile="$1"
-outputfile="$2"
+inputfile="$1"; shift
+outputfile="$1"; shift
 
-ffprobe -select_streams v -of flat -show_streams -show_format -hide_banner >$datafile 2>/dev/null "$1"
+doforcerate=false
+dofullrate=false
+forcedrate=""
+bayerscale=3
+maxcolors=96
+maxsize=2097151
+minsize=1966080
+
+for i; do
+	if [[ "$i" =~ ^--fullrate$ ]] ; then
+		dofullrate=true
+		doforcerate=false
+	elif [[ "$i" =~ ^--forcerate= ]] ; then
+		doforcerate=true
+		dofullrate=false
+		forcedrate="${i#--forcerate=}"
+	elif [[ "$i" =~ ^--bayerscale= ]] ; then
+		bayerscale="${i#--bayerscale=}"
+	elif [[ "$i" =~ ^--maxcolors= ]] ; then
+		maxcolors="${i#--maxcolors=}"
+	elif [[ "$i" =~ ^--maxsize= ]] ; then
+		maxsize="${i#--maxsize=}"
+	elif [[ "$i" =~ ^--minsize= ]] ; then
+		minsize="${i#--minsize=}"
+	else
+		>&2 echo "Unknown option: $i"
+		exit 1
+	fi
+done
+
+ffprobe -select_streams v -of flat -show_streams -show_format -hide_banner >$datafile 2>/dev/null "$inputfile"
 
 extract() {
 	value=$(grep streams.stream.0.$1= $datafile | sed "s/streams.stream.0.$1=//")
@@ -52,11 +85,15 @@ filesize() {
 width=$(extract width)
 height=$(extract height)
 duration=$(extract duration | tr -d '"')
-rate=$(extract r_frame_rate | tr '"' ' ' | bc)
-halfrate=$(echo "($rate)*0.5" | bc)
-framerate="-vf framestep=2 -r $halfrate"
-if [ "$3" = "--fullrate" ] ; then
-	framerate=""
+rate=$(extract r_frame_rate | tr '"' ' ' | bc -l) || rate=$(extract avg_frame_rate | tr '"' ' ' | bc -l)
+targetrate=$(awk -v rate="$rate" 'BEGIN { if (rate > 24) print 24; else print rate;}')
+halfrate=$(echo "($targetrate)*0.5" | bc -l)
+if $dofullrate; then
+	framerate="-r $targetrate"
+elif $doforcerate; then
+	framerate="-r $forcedrate"
+else
+	framerate="-r $halfrate"
 fi
 scale=1
 scalehigh=1
@@ -77,20 +114,20 @@ creategif(){
 	newheight=$(echo "scale=0;" $height \* $scale | bc)
 	
 	echo "Testing Size: " ${newwidth%.*}x${newheight%.*}
-	ffmpeg -y -i "$inputfile" -map v -pix_fmt bgr0 -s ${newwidth%.*}x${newheight%.*} $framerate -c ffv1 -f matroska $mkvfile 2>&1 | stdbuf -o0 tr '\r' '\n' | grep --line-buffered "^frame" | fractionDone | while read line; do echo -n "Scaling Video... "; echo $line; done | stdbuf -o0 tr '\n' '\r'
+	ffmpeg -y -i "$inputfile" -map v -pix_fmt bgr0 -s ${newwidth%.*}x${newheight%.*} $framerate -c ffv1 -f nut $nutfile 2>&1 | stdbuf -o0 tr '\r' '\n' | grep --line-buffered "^frame" | fractionDone | while read line; do echo -n "Scaling Video... "; echo $line; done | stdbuf -o0 tr '\n' '\r'
 	echo -n "Scaling Video... Done. Generating Palette... "
-	ffmpeg -y -i $mkvfile -vf palettegen=max_colors=96 -c png -f image2 $palettefile >/dev/null 2>&1
+	ffmpeg -y -f nut -i $nutfile -vf "palettegen=max_colors=${maxcolors}" -c png -f image2 $palettefile >/dev/null 2>&1
 	echo -ne 'Done. \r'
-	ffmpeg -y -i $mkvfile -i $palettefile -lavfi paletteuse=dither=bayer:bayer_scale=3 -c gif -f gif $giffile 2>&1 | stdbuf -o0 tr '\r' '\n' | grep --line-buffered "^frame" | fractionDone | while read line; do echo -n "Scaling Video... Done. Generating Palette... Done. Generating GIF... "; echo $line; done | stdbuf -o0 tr '\n' '\r'
+	ffmpeg -y -f nut -i $nutfile -f png_pipe -i $palettefile -lavfi "paletteuse=dither=bayer:bayer_scale=${bayerscale}" -c gif -f gif $giffile 2>&1 | stdbuf -o0 tr '\r' '\n' | grep --line-buffered "^frame" | fractionDone | while read line; do echo -n "Scaling Video... Done. Generating Palette... Done. Generating GIF... "; echo $line; done | stdbuf -o0 tr '\n' '\r'
 	echo -n "Scaling Video... Done. Generating Palette... Done. Generating GIF... Done. Crushing GIF... "
-	gifsicle --batch --unoptimize --optimize=3 --optimize=keep-empty "$giffile"
+	gifsicle --batch --unoptimize --optimize=3 "$giffile"
 	echo 'Done.'
 }
 
 adjustscale(){
 	echo -n "Checking Filesize... "
 	currfilesize=$(filesize $giffile)
-	if [ $currfilesize -gt 2000000 ] ; then
+	if [ $currfilesize -gt $maxsize ] ; then
 		if [ $foundlowerbound -eq 0 ] ; then
 			echo -n "Too Big: "
 			scalehigh=$scale
@@ -101,7 +138,7 @@ adjustscale(){
 			scalehigh=$scale
 			scale=$(echo 0.5 \* $scalelow + 0.5 \* $scalehigh | bc -l)
 		fi
-	elif [ $currfilesize -lt 1900000 ] && [ $(echo "$scale < 1" | bc) -ne 0 ]; then
+	elif [ $currfilesize -lt $minsize ] && [ $(echo "$scale < 1" | bc) -ne 0 ]; then
 		echo -n "Too Small: "
 		foundlowerbound=1
 		scalelow=$scale
@@ -113,7 +150,7 @@ adjustscale(){
 	echo
 }
 
-while [ $(echo "$scale < 1" | bc) -ne 0 ] && [ $(filesize $giffile) -lt 1900000 ] || [ $(filesize $giffile) -gt 2000000 ] || [ $(filesize $giffile) -eq 0 ] ; do
+while [ $(echo "$scale < 1" | bc) -ne 0 ] && [ $(filesize $giffile) -lt $minsize ] || [ $(filesize $giffile) -gt $maxsize ] || [ $(filesize $giffile) -eq 0 ] ; do
 	creategif
 	adjustscale
 done
