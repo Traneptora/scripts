@@ -11,19 +11,23 @@ if [ $# -eq 0 ] ; then
 fi
 
 COMM="$(basename "$1")"
-LOG=~/.log/launch-"$COMM".log
+mkdir -p ~/.local/share/log/
+LOG=~/.local/share/log/launch-"$COMM".log
 
 clup() {
-	echo >>"$LOG"
-	echo "--------" >>"$LOG"
-	echo >>"$LOG"
-	touch "$LOG".lz4
-	cat <(lz4 -d "$LOG".lz4 - 2>~/.log/launch-"$COMM"-lz4status.log) "$LOG" | lz4 -z - - 2>>~/.log/launch-"$COMM"-lz4status.log >"$LOG".lz4.2
-	mv "$LOG".lz4.2 "$LOG.lz4"
+	#echo >>"$LOG"
+	#echo "--------" >>"$LOG"
+	#echo >>"$LOG"
+	#touch "$LOG".lz4
+	#cat <(lz4 -d "$LOG".lz4 - 2>~/.log/launch-"$COMM"-lz4status.log) "$LOG" | lz4 -z - - 2>>~/.log/launch-"$COMM"-lz4status.log >"$LOG".lz4.2
+	#mv "$LOG".lz4.2 "$LOG.lz4"
+	gzip -9 <"$LOG" >"$LOG.gz"
 	rm -f "$LOG"
 }
 
 trap clup EXIT
 
-"$@"
 
+# This is intentionally not exec "$@"
+# Otherwise the exit trap would not work
+"$@"

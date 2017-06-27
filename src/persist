@@ -2,8 +2,12 @@
 set -e
 
 usage(){
-	echo "Usage:" "$(basename $0)" "start|stop" "command"
+	print_usage
 	exit 1
+}
+
+print_usage(){
+	echo "Usage:" "$(basename "$0")" "start|stop" "command"
 }
 
 if [ $# -le 1 ] ; then
@@ -21,8 +25,8 @@ if ! daemon --help </dev/null >/dev/null 2>/dev/null; then
 	exit 1
 fi
 
-if ! launch-wrapper </dev/null >/dev/null 2>/dev/null; then
-	echo "\"launch-wrapper\" not found in your PATH."
+if ! persist-wrapper </dev/null >/dev/null 2>/dev/null; then
+	echo "\"persist-wrapper\" not found in your PATH."
 	echo "Did you remember to install that as well?"
 	exit 1
 fi
@@ -30,20 +34,21 @@ fi
 
 
 COMM="$(basename "$2")"
-LOG=~/.log/launch-"$COMM".log
+mkdir -p ~/.local/share/log/
+LOG=~/.local/share/log/persist-"$COMM".log
 case "$1" in
 	start)
 		MODE=start
 		shift
-		mkdir -p ~/.log/
-		daemon --name="$COMM" --respawn --inherit --safe -o ~/.log/persist-"$COMM".log -D "$PWD" -- persist-wrapper "$@"
-		if [ $? == 0 ] ; then
-			echo "Successfully launched. Output is appended to ~/.log/persist-$COMM.log"
+		# Respawn is the whole point
+		if daemon --name="$COMM" --respawn --inherit --safe -o "$LOG" -D "$PWD" -- persist-wrapper "$@" ; then
+			echo "Successfully launched. Output is appended to $LOG"
 			exit 0
 		else
 			echo "Failed to launch."
 			exit 2
 		fi
+
 		;;
 	stop)
 		MODE=stop
@@ -66,9 +71,12 @@ case "$1" in
 			exit 2
 		fi
 		;;
+	--help)
+		print_usage
+		exit 0
+		;;
 	*)
 		usage
 		;;
 esac
 exit 0
-
