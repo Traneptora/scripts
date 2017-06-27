@@ -3,7 +3,7 @@
 filename="$1"
 shift
 
-OUTPUT="$(curl -F"file=@$filename" http://0x0.st $@)"
+OUTPUT="$(curl -F"file=@$filename" http://0x0.st "$@")"
 echo "$OUTPUT"
 echo -n "$OUTPUT" | xclip
 xclip -o -t text/plain | xclip -i -selection clipboard -t text/plain
