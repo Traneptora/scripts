@@ -1,0 +1,21 @@
+#!/bin/sh
+set -e
+if [ -z "$2" ] ; then
+	>&2 echo "$0 input.png output.jpg [ noise_level ] "
+	exit 1
+fi
+
+if [ -z "$3" ] ; then
+	LEVEL=2
+else
+	LEVEL="$3"
+fi
+
+TEMPFILE=$(mktemp)
+mv "$TEMPFILE" "${TEMPFILE}.png"
+TEMPFILE="${TEMPFILE}.png"
+
+waifu2x-converter-cpp --mode noise --noise_level "$LEVEL" -i "$1" -o "$TEMPFILE"
+cjpeg -q 98 <"$TEMPFILE" >"$2"
+rm -f "$TEMPFILE"
+
