@@ -2,8 +2,8 @@
 set -e
 
 if [ "$1" == "-r" -o "$1" == "--recursive" ] ; then
-	find -name '*~' -or -name '~$*' | parallel rm -f {}
+	find -name '*~' -or -name '~$*' -exec rm -f {} \;
 else
-	rm -f *~ ~\$*
+	rm -f *~ \~\$*
 fi
 
