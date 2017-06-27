@@ -1,4 +1,4 @@
 #!/bin/sh
 
-exec ffmpeg -y -v error -f x11grab -video_size $(xrandr -q | grep '\*' | cut -d'*' -f1 | awk '{ print $1 " -framerate " $NF}') -i $DISPLAY -frames 1 -c png -f image2 /tmp/screenshot.png 2>~/.log/screencap.log
+exec ffmpeg -y -v error -f x11grab -video_size $(xrandr -q | grep '\*' | cut -d'*' -f1 | awk '{ print $1 " -framerate " $NF}') -i $DISPLAY -frames 1 -c png -f image2 /tmp/screenshot.png 2>~/.local/share/log/screencap.log
 
