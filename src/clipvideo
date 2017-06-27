@@ -14,6 +14,14 @@ BITRATE="vbr"
 FORMAT="yuv420p10le"
 FFOPTS=""
 FILTER=""
+QP="17"
+
+BAD_METADATA="BPS DURATION NUMBER_OF_FRAMES NUMBER_OF_BYTES _STATISTICS_WRITING_APP _STATISTICS_WRITING_DATE_UTC _STATISTICS_TAGS"
+BAD_MD_OPTS=""
+
+for tag in $BAD_METADATA; do
+	BAD_MD_OPTS="$BAD_MD_OPTS -metadata:s ${tag}= -metadata:s ${tag}-eng="
+done
 
 process_option(){
 	NAME="$1"
@@ -45,42 +53,52 @@ process_option(){
 				nvenc)
 					ENCODER="h264_nvenc"
 					FORMAT="nv12"
+					QP=25
 					;;
 				h264)
 					ENCODER="h264_nvenc"
 					FORMAT="nv12"
+					QP=25
 					;;
 				h264_nvenc)
 					ENCODER="h264_nvenc"
 					FORMAT="nv12"
+					QP=25
 					;;
 				hevc)
 					ENCODER="hevc_nvenc"
 					FORMAT="p010le"
+					QP=25
 					;;
 				hevc_nvenc)
 					ENCODER="hevc_nvenc"
 					FORMAT="p010le"
+					QP=25
 					;;
 				x264)
 					ENCODER="libx264"
 					FORMAT="yuv420p10le"
+					QP=17
 					;;
 				libx264)
 					ENCODER="libx264"
 					FORMAT="yuv420p10le"
+					QP=17
 					;;
 				x265)
 					ENCODER="libx265"
 					FORMAT="yuv420p10le"
+					QP=17
 					;;
 				libx265)
 					ENCODER="libx265"
 					FORMAT="yuv420p10le"
+					QP=17
 					;;
 				*)
 					ENCODER="$VALUE"
 					FORMAT="yuv420p"
+					QP=25
 					;;
 			esac
 			;;
@@ -95,6 +113,12 @@ process_option(){
 			;;
 		pause)
 			>&2 echo "Warning: Ignoring --pause"
+			;;
+		mute)
+			>&2 echo "Warning: Ignoring --mute"
+			;;
+		qp)
+			QP="$QP"
 			;;
 		*)
 			>&2 echo "Invalid option: $NAME=$VALUE"
@@ -174,10 +198,14 @@ fi
 if [ "x$BITRATE" = "xvbr" ] ; then
 	case "$ENCODER" in
 		libx26?)
-			BITRATEOPTS="-crf:v 18"
+			BITRATEOPTS="-crf:v $QP"
+			;;
+		# These are lossless
+		ffvhuff|huffyuv|utvideo|ffv1)
+			BITRATEOPTS=""
 			;;
 		*)
-			BITRATEOPTS="-qp:v 15"
+			BITRATEOPTS="-qp:v $QP"
 			;;
 	esac
 else
@@ -190,18 +218,25 @@ case "$ENCODER" in
 		VIDEOOPTS="-c:v h264_nvenc -gpu:v 0 -preset:v slow -profile:v high -spatial-aq:v 1 -qmin:v 0 -qmax:v 69"
 		;;
 	libx264)
-		VIDEOOPTS="-c:v libx264 -preset:v slow"
+		VIDEOOPTS="-c:v libx264 -preset:v slow -aq-mode:v 3 -bf:v 8"
 		;;
 	libx265)
-		VIDEOOPTS="-c:v libx265 -preset:v slow"
+		VIDEOOPTS="-c:v libx265 -preset:v slow -aq-mode:v 3 -bf:v 8"
 		;;
+	# The _ in spacial_aq is intentional
+	# Nvenc is weird
 	hevc_nvenc)
 		VIDEOOPTS="-c:v hevc_nvenc -gpu:v 0 -preset:v slow -profile:v main10 -tier:v 1 -rc-lookahead:v 54 -surfaces:v 64 -spatial_aq:v 1"
+		;;
+	ffv1)
+		VIDEOOPTS="-level:v 3 -g 1 -slicecrc:v 1 -coder:v range_def -slices:v 4 -threads:v 4"
 		;;
 	*)
 		VIDEOOPTS="-c:v $ENCODER"
 		;;
 esac
+
+FORMATOPTS="$FORMATOPTS $BAD_MD_OPTS"
 
 if [ "x$SUBS" = "ximage" ] ; then
 	set -x

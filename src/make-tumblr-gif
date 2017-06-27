@@ -17,7 +17,7 @@ finish() {
 trap finish EXIT
 
 usage(){
-	printf "Usage:\n\t%s input_video_file output_gif_file [--fullrate]\n" "${exename##*/}"
+	printf "Usage:\n\t%s input_video_file output_gif_file [ --fullrate | --forcerate=N | --scalerate=N | --bayerscale={1-5} | --minsize=N | --maxsize=N | --maxcolors={2-255} ] ... \n" "${exename##*/}"
 	echo
 	echo $(basename $0) "converts the input video to a GIF with size between 1.9 MB and 2.0 MB."
 	echo "2.0 MB is the tumblr GIF size limit, which is why this limit is useful."
@@ -40,20 +40,29 @@ outputfile="$1"; shift
 
 doforcerate=false
 dofullrate=false
+doscalerate=false
 forcedrate=""
+scaledrate=""
 bayerscale=3
 maxcolors=96
 maxsize=2097151
-minsize=1966080
+minsize=""
 
 for i; do
 	if [[ "$i" =~ ^--fullrate$ ]] ; then
 		dofullrate=true
 		doforcerate=false
+		doscalerate=false
 	elif [[ "$i" =~ ^--forcerate= ]] ; then
 		doforcerate=true
 		dofullrate=false
+		doscalerate=false
 		forcedrate="${i#--forcerate=}"
+	elif [[ "$i" =~ ^--scalerate= ]] ; then
+		doforcerate=false
+		dofullrate=false
+		doscalerate=true
+		scaledrate="${i#--scalerate=}"
 	elif [[ "$i" =~ ^--bayerscale= ]] ; then
 		bayerscale="${i#--bayerscale=}"
 	elif [[ "$i" =~ ^--maxcolors= ]] ; then
@@ -67,6 +76,10 @@ for i; do
 		exit 1
 	fi
 done
+
+if [ -z "$minsize" ] ; then
+	minsize=$(printf "%.0f" "$(printf '%s*0.9375\n' "$maxsize" | bc -l)")
+fi
 
 ffprobe -select_streams v -of flat -show_streams -show_format -hide_banner >$datafile 2>/dev/null "$inputfile"
 
@@ -86,12 +99,14 @@ width=$(extract width)
 height=$(extract height)
 duration=$(extract duration | tr -d '"')
 rate=$(extract r_frame_rate | tr '"' ' ' | bc -l) || rate=$(extract avg_frame_rate | tr '"' ' ' | bc -l)
-targetrate=$(awk -v rate="$rate" 'BEGIN { if (rate > 24) print 24; else print rate;}')
+targetrate=$(awk -v rate="$rate" 'BEGIN { if (rate > 30) print 30; else print rate;}')
 halfrate=$(echo "($targetrate)*0.5" | bc -l)
 if $dofullrate; then
 	framerate="-r $targetrate"
 elif $doforcerate; then
 	framerate="-r $forcedrate"
+elif $doscalerate; then
+	framerate="-vf setpts=N/$scaledrate/TB -r $scaledrate"
 else
 	framerate="-r $halfrate"
 fi
