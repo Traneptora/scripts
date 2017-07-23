@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e; set +H
 
 VIDEOSTREAM="v"
 AUDIOSTREAM="a:0"
@@ -14,7 +15,7 @@ BITRATE="vbr"
 FORMAT="yuv420p10le"
 FFOPTS=""
 FILTER=""
-QP="17"
+QP="16"
 
 BAD_METADATA="BPS DURATION NUMBER_OF_FRAMES NUMBER_OF_BYTES _STATISTICS_WRITING_APP _STATISTICS_WRITING_DATE_UTC _STATISTICS_TAGS"
 BAD_MD_OPTS=""
@@ -78,22 +79,22 @@ process_option(){
 				x264)
 					ENCODER="libx264"
 					FORMAT="yuv420p10le"
-					QP=17
+					QP=16
 					;;
 				libx264)
 					ENCODER="libx264"
 					FORMAT="yuv420p10le"
-					QP=17
+					QP=16
 					;;
 				x265)
 					ENCODER="libx265"
 					FORMAT="yuv420p10le"
-					QP=17
+					QP=16
 					;;
 				libx265)
 					ENCODER="libx265"
 					FORMAT="yuv420p10le"
-					QP=17
+					QP=16
 					;;
 				*)
 					ENCODER="$VALUE"
@@ -106,10 +107,14 @@ process_option(){
 			SID="$VALUE"
 			;;
 		ffopts)
-			FFOPTS="$VALUE"
+			FFOPTS="$FFOPTS $VALUE"
 			;;
 		filter)
-			FILTER="$VALUE"
+			if [ -z "$FILTER" ] ; then
+				FILTER="$VALUE"
+			else
+				FILTER="$FILTER,$VALUE"
+			fi
 			;;
 		pause)
 			>&2 echo "Warning: Ignoring --pause"
@@ -190,7 +195,7 @@ elif [[ "$VIDEOOUTPUT" =~ \.(nut|NUT)$ ]] ; then
 	AUDIOOPTS="-c:a libopus -b:a 128k"
 elif [[ "$VIDEOOUTPUT" =~ \.(mp4|MP4)$ ]] ; then
 	FORMATOPTS="-movflags +faststart"
-	AUDIOOPTS="-c:a libfdk_aac -b:a 128k"
+	AUDIOOPTS="-c:a aac -b:a 128k"
 else
 	AUDIOOPTS="-c:a libvorbis -q:a 5"
 fi
@@ -229,7 +234,7 @@ case "$ENCODER" in
 		VIDEOOPTS="-c:v hevc_nvenc -gpu:v 0 -preset:v slow -profile:v main10 -tier:v 1 -rc-lookahead:v 54 -surfaces:v 64 -spatial_aq:v 1"
 		;;
 	ffv1)
-		VIDEOOPTS="-level:v 3 -g 1 -slicecrc:v 1 -coder:v range_def -slices:v 4 -threads:v 4"
+		VIDEOOPTS="-c:v ffv1 -level:v 3 -g 1 -slicecrc:v 1 -coder:v range_def -slices:v 4 -threads:v 4"
 		;;
 	*)
 		VIDEOOPTS="-c:v $ENCODER"
@@ -240,16 +245,16 @@ FORMATOPTS="$FORMATOPTS $BAD_MD_OPTS"
 
 if [ "x$SUBS" = "ximage" ] ; then
 	set -x
-	ffmpeg -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -lavfi "[0:v][0:s:${SID}]overlay,${FILTER}[v]" -map "[v]" -map "$AUDIOSTREAM" -t "$DURATION" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
-	2>/dev/null set +x
+	time ffmpeg -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -lavfi "[0:v][0:s:${SID}]overlay,${FILTER}[v]" -map "[v]" -map "$AUDIOSTREAM" -t "$DURATION" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+	set +x
 elif [ "x$SUBS" = "xsoft" ] ; then
 	set -x
-	ffmpeg -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -map s? -map t? -map d? -c copy -t "$DURATION" -vf "$FILTER" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
-	2>/dev/null set +x
+	time ffmpeg -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -map s? -map t? -map d? -c copy -t "$DURATION" -vf "$FILTER" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+	set +x
 else
 	set -x
-	ffmpeg -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -t "$DURATION" -vf "$FILTER" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
-	2>/dev/null set +x
+	time ffmpeg -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -t "$DURATION" -vf "$FILTER" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+	set +x
 fi
 
 rm -f "$subslink"
