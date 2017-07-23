@@ -1,21 +1,98 @@
 #!/bin/sh
 set -e
+set +H
+
 if [ -z "$2" ] ; then
-	>&2 echo "$0 input.png output.jpg [ noise_level ] "
+	>&2 echo "$0 input.png output.jpg [ --remove ] [ --quiet ] [ noise_level ] "
 	exit 1
 fi
 
-if [ -z "$3" ] ; then
-	LEVEL=2
+INPUT="$1"
+OUTPUT="$2"
+REMOVE=false
+QUIET=false
+LEVEL=2
+
+shift 2
+
+for i; do
+	if [ "$i" = "--remove" ] ; then
+		REMOVE=true
+	elif [ "$i" = "--quiet" ] ; then
+		QUIET=true
+	else
+		LEVEL="$i"
+	fi
+done
+
+WOUTPUT=$(mktemp)
+mv "$WOUTPUT" "${WOUTPUT}.png"
+WOUTPUT="${WOUTPUT}.png"
+WINPUT="$INPUT"
+
+if $QUIET; then
+	STDOUT="/dev/null"
+	STDERR="/dev/null"
 else
-	LEVEL="$3"
+	STDOUT="/dev/stderr"
+	STDERR="/dev/stderr"
 fi
 
-TEMPFILE=$(mktemp)
-mv "$TEMPFILE" "${TEMPFILE}.png"
-TEMPFILE="${TEMPFILE}.png"
+waifu2x-converter-cpp --mode noise --noise_level "$LEVEL" -i "$WINPUT" -o "$WOUTPUT" >$STDOUT
 
-waifu2x-converter-cpp --mode noise --noise_level "$LEVEL" -i "$1" -o "$TEMPFILE"
-cjpeg -q 98 <"$TEMPFILE" >"$2"
-rm -f "$TEMPFILE"
+INHEIGHT="$(identify -format '%h' "$WOUTPUT")"
+INWIDTH="$(identify -format '%w' "$WOUTPUT")"
+
+CINPUT="$WOUTPUT"
+
+if [ "$INHEIGHT" -gt 720 ] ; then
+	TEMPFILEB=$(mktemp)
+	mv "$TEMPFILEB" "${TEMPFILEB}.png"
+	TEMPFILEB="${TEMPFILEB}.png"
+	convert -filter lanczos -resize 1280x720 "$WOUTPUT" "$TEMPFILEB"
+	CINPUT="$TEMPFILEB"
+fi
+
+BASEOUT="${OUTPUT%.*}"
+
+INPUTDIR="$(dirname "$INPUT")"
+mkdir -p "${INPUTDIR}"/preview/
+
+if [ "$INWIDTH" -gt 400 ] ; then
+
+	OUTPREVIEW="$INPUTDIR"/preview/"${BASEOUT##*/}.preview.png"
+
+	convert -filter lanczos -resize 400x300 "$WOUTPUT" "$OUTPREVIEW"
+	optipng -zc9 -zm9 -zs1 -f5 "$OUTPREVIEW" 2>$STDERR >$STDOUT
+
+fi
+
+FORMAT="${OUTPUT##*.}"
+FINALOUT="${INPUTDIR}/${BASEOUT##*/}.${FORMAT}"
+
+case "$FORMAT" in
+	webp)
+		cwebp -q 100 "$CINPUT" -o "$FINALOUT" 2>$STDERR
+		;;
+	jpg)
+		cjpeg -q 98 -sample 2x2 <"$CINPUT" >"$FINALOUT" 2>$STDERR
+		;;
+	flif)
+		flif -e -v -v --overwrite -Q85 "$CINPUT" "$FINALOUT" 2>$STDERR >$STDOUT
+		;;
+	png)
+		convert "$CINPUT" "$FINALOUT" 2>$STDERR >$STDOUT
+		optipng -zc9 -zm9 -zs1 -f5 "$FINALOUT" 2>$STDERR >$STDOUT
+		;;
+	*)
+		echo >&2 "Unrecognized output format: $FORMAT"
+		exit 2
+		;;
+esac
+
+rm -f "$WOUTPUT"
+rm -f "$TEMPFILEB"
+if $REMOVE; then
+	rm -f "$INPUT"
+fi
 
