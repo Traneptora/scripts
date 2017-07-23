@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e; set +H
+
+optipng -o4 "$1"
+TEMPPNG=$(mktemp)
+zopflipng -y -m "$1" "$TEMPPNG"
+mv "$TEMPPNG" "$1"
+
