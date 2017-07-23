@@ -1,5 +1,6 @@
-#!/bin/bash
+#!/bin/sh
 set -e
+set +H
 
 if [ $# -le 0 ] ; then
 	echo "Usage: $(basename "$0") <command>"
@@ -11,15 +12,7 @@ if ! daemon --help </dev/null >/dev/null 2>/dev/null; then
 	exit 1
 fi
 
-if ! launch-wrapper </dev/null >/dev/null 2>/dev/null; then
-	echo "\"launch-wrapper\" not found in your PATH."
-	echo "Did you remember to install that as well?"
-	exit 1
-fi
-
 COMM="$(basename "$1")"
 LOG=~/.local/share/log/launch-"$COMM".log
 mkdir -p ~/.local/share/log/
-daemon --inherit --safe -o "$LOG" -D "$PWD" -- launch-wrapper "$@" || ( echo "Failed to launch." && exit 2 )
-#echo "Successfully launched. Output is appended to ~/.log/launch-$COMM.log.lz4"
-exit 0
+daemon --inherit --safe -o "$LOG" -D "$PWD" -- "$@" || ( echo "Failed to launch." && exit 2 )
