@@ -1,0 +1,56 @@
+#!/bin/sh
+set -e
+set +H
+
+if [ -z "$1" ] ; then
+	>&2 echo "$0 filename.png"
+	exit 1
+fi
+
+INPUT="$1"
+QUIET=false
+shift
+
+for i; do
+	if [ "$i" = "--quiet" ] ; then
+		QUIET=true
+	else
+		LEVEL="$i"
+	fi
+done
+
+if $QUIET; then
+	STDOUT="/dev/null"
+	STDERR="/dev/null"
+else
+	STDOUT="/dev/stderr"
+	STDERR="/dev/stderr"
+fi
+
+TEMPFILE1="$(mktemp --suffix=.png)"
+
+waifu2x-converter-cpp --mode noise --noise_level "$LEVEL" -i "$INPUT" -o "$TEMPFILE1" >$STDOUT
+
+INHEIGHT="$(identify -format '%h' "$INPUT")"
+INWIDTH="$(identify -format '%w' "$INPUT")"
+
+if [ "$INHEIGHT" -gt 720 ] || [ "$INWIDTH" -gt 1280 ]; then
+	# It maintains aspect and fits it inside 1280x720
+	convert -filter Lanczos2Sharp -resize 1280x720 "$TEMPFILE1" "$INPUT"
+else
+	cp "$TEMPFILE1" "$INPUT"	
+fi
+
+if $QUIET; then
+	OQUIET="-quiet"
+else
+	OQUIET=" "	
+fi
+
+optipng $OQUIET -zc9 -zm8 -zs0,1 -f0,4,5 "$INPUT"
+
+zopflipng -y -m "$INPUT" "$TEMPFILE1" >$STDOUT
+cp "$TEMPFILE1" "$INPUT"
+
+rm -f "$TEMPFILE1"
+
