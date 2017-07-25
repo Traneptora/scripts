@@ -10,9 +10,9 @@ minorusage() {
 usage(){
 	minorusage
 	echo
-	echo "exsorttar will take a list of files and directories and recurse through with the find command."
+	echo "exsorttar will take a list of files and directories and recurse through with find(1)."
 	echo
-	echo "It will create a tar archive with directories first (sorted by name, starting with the top directories), followed by regular files (sorted by file extension, then by filename, then by directory name), followed by everything else (including symbolic links, etc.)"
+	echo "It will create a tar(1) archive with directories first (sorted by name, starting with the top directories), followed by regular files (sorted by file extension, then by filename, then by directory name), followed by everything else (including symbolic links, etc.)"
 	echo ""
 	echo "Options:"
 	echo "    --help,-h,-?            Print this help message."
@@ -26,16 +26,17 @@ usage(){
 	echo "    --tararg=<tararg>       Add <tararg> as an argument to the tar command."
 	echo "                            You may specify --tararg multiple times to add multiple arguments."
 	echo "                            Example: --tararg=-z"
-	echo "    --lz4                   Compress the tar archive with lz4 HC (requires the lz49 script)."
+	echo "    --lz4                   Compress the tar archive with lz4 HC"
+	echo "                            (Similar efficiency to gzip, fast compression, very fast decompression)"
 	echo "    --force                 Don't ask questions before making decisions."
 	echo "                            This is particularly useful in a script, but not recommended for interactive use."
 	echo ""
 	echo "You are required to give the tar archive filename unless --no-tar is specified."
 	echo "Pass '-' as the archive name to write the archive to standard out."
 	echo "The tar archive will be uncompressed unless --lz4 is specified. If you want a compressed archive, you can write the archive to standard out and filter using your favorite compression program to create a compressed archive on the fly."
-	echo "You could also use, say, --tararg=--xz to compress the archive with xz."
+	echo "You could also use a tararg, like --tararg=--xz, to compress the archive with xz."
 	echo ""
-	echo "Note: Careful with directory names starting with a - or other odd things as this may mess up find."
+	echo "Note: Careful with directory names starting with a - or other odd things as this may mess up find(1)."
 	exit $1
 }
 
@@ -151,11 +152,10 @@ if ! $force && ! $notar && [ -f "$tarfile" ]; then
 	fi
 fi
 
-# this uses the lz49 script. It's essentially a wrapper for lz4 with -9 attached, because tar -I doesn't let us pass options.
+# tar -I allows you to use an external program for filtering. We use -I 'lz4 -9 -z'
 if $lz4; then
 	if ! lz4 -9 -z - - </dev/null >/dev/null 2>/dev/null; then
 		echo "lz4 not found in PATH."
-		#echo "Add the lz49 script to use --lz4."
 		exit 2
 	fi
 	tarargs+=("-I")
