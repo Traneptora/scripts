@@ -1,5 +1,5 @@
 #!/bin/bash 
-set -e
+set -e; set +H
 shopt -s expand_aliases
 alias echo='>&2 echo'
 
