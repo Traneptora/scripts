@@ -1,12 +1,14 @@
 #!/bin/sh
+set -e; set +H
 
 while read line; do
-	if ( echo "$line" | grep ,, >/dev/null ) ; then
-		transline=$(trans -no-auto -brief $1 "$(echo "$line" | sed 's/.*,,\(.*\)/\1/')")
-		echo -n "$line" | sed 's/\(.*,,\).*/\1/'
-		echo "$transline"
+	if ( printf %s "$line" | grep -q ,, ) ; then
+		# Yes, really, this is three quotes deep
+		transline="$(trans -no-auto -brief "$1" "$(printf %s "${line}\n" | sed 's/.*,,\(.*\)/\1/')")"
+		printf %s "$line" | sed 's/\(.*,,\).*/\1/'
+		printf '%s\n' "$transline"
 	else
-		echo $line
+		printf '%s\n' "$line"
 	fi
 done
 
