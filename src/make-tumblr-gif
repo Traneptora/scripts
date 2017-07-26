@@ -44,7 +44,7 @@ doscalerate=false
 forcedrate=""
 scaledrate=""
 bayerscale=3
-maxcolors=96
+maxcolors=144
 maxsize=2097151
 minsize=""
 
