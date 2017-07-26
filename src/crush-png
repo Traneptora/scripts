@@ -1,8 +1,13 @@
 #!/bin/sh
 set -e; set +H
 
-optipng -o4 "$1"
-TEMPPNG=$(mktemp)
-zopflipng -y -m "$1" "$TEMPPNG"
-mv "$TEMPPNG" "$1"
+ORIGPNG="$1"
+TEMPPNG="$ORIGPNG".crushpng_tempout
+BAKPNG="$ORIGPNG".crushpng_backup
+optipng -fix -force -preserve -zc7 -zm8 -zs0,1 -f0,4,5 "$ORIGPNG"
+zopflipng -y -m "$ORIGPNG" "$TEMPPNG"
+mv -f "$ORIGPNG" "$BAKPNG"
+mv -f "$TEMPPNG" "$ORIGPNG"
+cp --attributes-only --preserve=all "$BAKPNG" "$ORIGPNG"
+rm -f "$BAKPNG"
 
