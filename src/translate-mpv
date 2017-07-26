@@ -1,16 +1,24 @@
 #!/bin/sh
-set -e
+set -e; set +H
 
+# Extract our ASS stream
 rm -f .subs-playass.ass
-fname="$(basename "$1")"
-ffmpeg -y -i "$1" -map 0:s -c:s copy .subs-playass.ass
+fname="$1"; shift
+ffmpeg -y -i "$fname" -map 0:s -c:s copy .subs-playass.ass
+
 # This cost me several hours of confusion before I realized this is necessary
 # Google Translate will complain about carriage returns
 dos2unix .subs-playass.ass
-trans_fname="${fname}.translated.ass"
+
+trans_fname="${fname}.translate-mpv.ass"
+translanguage="$1"; shift
+
 if [ ! -e "$trans_fname" ] ; then
-	cat .subs-playass.ass | translate-ass "$2" | tee "$trans_fname"
+	cat .subs-playass.ass | translate-ass "$translanguage" | tee "$trans_fname"
 fi
+
 rm -f .subs-playass.ass
-exec mpv "$1" --sub-file="$trans_fname"
+
+# we use shift earlier so "$@" works
+exec mpv "$fname" --sub-file="$trans_fname" "$@"
 
