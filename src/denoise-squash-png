@@ -1,6 +1,5 @@
 #!/bin/sh
-set -e
-set +H
+set -e; set +H
 
 if [ -z "$1" ] ; then
 	>&2 echo "$0 filename.png"
