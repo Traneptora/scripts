@@ -1,11 +1,49 @@
 #!/bin/sh
 set -e; set +H
 
+if [ -z "$1" ] ; then
+	>&2 echo "$0 filename.png"
+	exit 1
+fi
+
 ORIGPNG="$1"
-TEMPPNG="$ORIGPNG".crushpng_tempout
-BAKPNG="$ORIGPNG".crushpng_backup
-optipng -fix -force -preserve -zc7 -zm8 -zs0,1 -f0,4,5 "$ORIGPNG"
-zopflipng -y -m "$ORIGPNG" "$TEMPPNG"
+QUIET=false
+shift
+
+for i; do
+	if [ "$i" = "--quiet" ] ; then
+		QUIET=true
+	else
+		LEVEL="$i"
+	fi
+done
+
+if $QUIET; then
+	STDOUT="/dev/null"
+	STDERR="/dev/null"
+else
+	STDOUT="/dev/stderr"
+	STDERR="/dev/stderr"
+fi
+
+if $QUIET; then
+	OQUIET="-quiet"
+else
+	OQUIET=" "	
+fi
+
+TEMPPNG="$ORIGPNG".crushpng_tempout.$RANDOM
+while [ -e "$TEMPPNG" ] ; do
+	TEMPPNG="$TEMPPNG".$RANDOM
+done
+
+BAKPNG="$ORIGPNG".crushpng_backup.$RANDOM
+while [ -e "$BAKPNG" ] ; do
+	BAKPNG="$BAKPNG".$RANDOM
+done
+
+optipng $OQUIET -fix -force -preserve -zc7 -zm8 -zs0,1 -f0,4,5 "$ORIGPNG"
+zopflipng -y -m "$ORIGPNG" "$TEMPPNG" >$STDOUT
 mv -f "$ORIGPNG" "$BAKPNG"
 mv -f "$TEMPPNG" "$ORIGPNG"
 cp --attributes-only --preserve=all "$BAKPNG" "$ORIGPNG"
