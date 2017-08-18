@@ -53,7 +53,7 @@ mp.register_script_message("screenshot_write_accurate", function (stype)
 		local fpath = utils.join_path(path, fname)
         mp.commandv("screenshot-to-file", fpath, stype)
         mp.commandv("show-text", string.format("Screenshot: '%s'", fname))
-		mp.commandv("run", "/usr/bin/env", "crush-png", "--quiet", fpath);
+		mp.commandv("run", "/usr/bin/env", "crush-png", fpath, "--quiet");
     end
 end)
 

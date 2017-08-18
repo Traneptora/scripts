@@ -2,7 +2,7 @@
 set -e; set +H
 
 VIDEOSTREAM="v"
-AUDIOSTREAM="a:0"
+AUDIOSTREAM="a:0?"
 VIDEOINPUT=""
 VIDEOOUTPUT=""
 ARGSDONE="no"
@@ -98,7 +98,7 @@ process_option(){
 					;;
 				*)
 					ENCODER="$VALUE"
-					FORMAT="yuv420p"
+					FORMAT="yes"
 					QP=25
 					;;
 			esac
@@ -162,9 +162,17 @@ if [[ -z "$START" || -z "$END" ]] ; then
 fi
 
 if [ -z "$FILTER" ] ; then
-	FILTER="format=${FORMAT},setpts=PTS-STARTPTS"
+	if [ "$FORMAT" = "yes" ] ; then
+		FILTER=""
+	else
+		FILTER="format=${FORMAT}"
+	fi
 else
-	FILTER="${FILTER},format=${FORMAT},setpts=PTS-STARTPTS"
+	if [ "$FORMAT" = "yes" ] ; then
+		FILTER="${FILTER}"
+	else
+		FILTER="${FILTER},format=${FORMAT}"
+	fi
 fi
 
 time_duration_toseconds() {
@@ -187,12 +195,11 @@ fi
 FORMATOPTS=""
 
 if [[ "$VIDEOOUTPUT" =~ \.(mkv|MKV)$ ]] ; then
-	AUDIOOPTS="-c:a libopus -b:a 128k"
-	FORMATOPTS="-live 1"
+	AUDIOOPTS="-c:a libopus -b:a 128k -ac 2"
 elif [[ "$VIDEOOUTPUT" =~ \.(ts|TS)$ ]] ; then
-	AUDIOOPTS="-c:a libopus -b:a 128k"
+	AUDIOOPTS="-c:a libopus -b:a 128k -ac 2"
 elif [[ "$VIDEOOUTPUT" =~ \.(nut|NUT)$ ]] ; then
-	AUDIOOPTS="-c:a libopus -b:a 128k"
+	AUDIOOPTS="-c:a libopus -b:a 128k -ac 2"
 elif [[ "$VIDEOOUTPUT" =~ \.(mp4|MP4)$ ]] ; then
 	FORMATOPTS="-movflags +faststart"
 	AUDIOOPTS="-c:a aac -b:a 128k"
@@ -234,7 +241,7 @@ case "$ENCODER" in
 		VIDEOOPTS="-c:v hevc_nvenc -gpu:v 0 -preset:v slow -profile:v main10 -tier:v 1 -rc-lookahead:v 54 -surfaces:v 64 -spatial_aq:v 1"
 		;;
 	ffv1)
-		VIDEOOPTS="-c:v ffv1 -level:v 3 -g 1 -slicecrc:v 1 -coder:v range_def -slices:v 4 -threads:v 4"
+		VIDEOOPTS="-c:v ffv1 -level:v 3 -g 1 -slicecrc:v 1 -coder:v range_tab -slices:v 4 -threads:v 4"
 		;;
 	*)
 		VIDEOOPTS="-c:v $ENCODER"
@@ -245,15 +252,19 @@ FORMATOPTS="$FORMATOPTS $BAD_MD_OPTS"
 
 if [ "x$SUBS" = "ximage" ] ; then
 	set -x
-	time ffmpeg -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -lavfi "[0:v][0:s:${SID}]overlay,${FILTER}[v]" -map "[v]" -map "$AUDIOSTREAM" -t "$DURATION" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+	time ffmpeg -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -lavfi "[0:v][0:s:${SID}]overlay,${FILTER},setpts=PTS-STARTPTS[v]" -map "[v]" -map "$AUDIOSTREAM" -t "$DURATION" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
 	set +x
 elif [ "x$SUBS" = "xsoft" ] ; then
 	set -x
-	time ffmpeg -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -map s? -map t? -map d? -c copy -t "$DURATION" -vf "$FILTER" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+	time ffmpeg -ss "$START" -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -map 0:s:"$SID" -map t? -map d? -c copy -c:s ass -t "$DURATION" -vf "$FILTER" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+	set +x
+elif [ "x$SUBS" = "xhard" ] ; then
+	set -x
+	time ffmpeg -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -t "$DURATION" -vf "${FILTER},setpts=PTS-STARTPTS" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
 	set +x
 else
 	set -x
-	time ffmpeg -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -t "$DURATION" -vf "$FILTER" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+	time ffmpeg -ss "$START" -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -map t? -map d? -c copy -t "$DURATION" -vf "$FILTER" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
 	set +x
 fi
 

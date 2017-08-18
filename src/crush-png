@@ -6,9 +6,13 @@ if [ -z "$1" ] ; then
 	exit 1
 fi
 
+FINISHED_OPTIPNG=false
+STILL_WORKING=true
+
 ORIGPNG="$1"
 QUIET=false
 shift
+
 
 for i; do
 	if [ "$i" = "--quiet" ] ; then
@@ -32,20 +36,41 @@ else
 	OQUIET=" "	
 fi
 
-TEMPPNG="$ORIGPNG".crushpng_tempout.$RANDOM
+TEMPPNG="$ORIGPNG".crushpng_tempout.$RANDOM.tpng
 while [ -e "$TEMPPNG" ] ; do
-	TEMPPNG="$TEMPPNG".$RANDOM
+	TEMPPNG="${TEMPPNG%.tpng}".$RANDOM.tpng
 done
 
-BAKPNG="$ORIGPNG".crushpng_backup.$RANDOM
+BAKPNG="$ORIGPNG".crushpng_backup.$RANDOM.tpng
 while [ -e "$BAKPNG" ] ; do
-	BAKPNG="$BAKPNG".$RANDOM
+	BAKPNG="${BAKPNG%.tpng}".$RANDOM.tpng
 done
 
-optipng $OQUIET -fix -force -preserve -zc7 -zm8 -zs0,1 -f0,4,5 "$ORIGPNG"
-zopflipng -y -m "$ORIGPNG" "$TEMPPNG" >$STDOUT
-mv -f "$ORIGPNG" "$BAKPNG"
+clup() {
+	if $FINISHED_OPTIPNG ; then
+		if $STILL_WORKING ; then
+			>&2 echo "Received signal, cleaning up."
+		fi
+		rm -f "$TEMPPNG"
+		cp -f --attributes-only --preserve=all "$BAKPNG" "$ORIGPNG"
+		rm -f "$BAKPNG"
+	else
+		>&2 echo "Received signal, restoring from backup."
+		cp --preserve=all "$BAKPNG" "$ORIGPNG"
+		rm -f "$TEMPPNG"
+		rm -f "$BAKPNG"
+		rm -f "$ORIGPNG".bak
+	fi
+}
+
+trap clup EXIT
+
+cp --preserve=all "$ORIGPNG" "$BAKPNG"
+
+optipng $OQUIET -fix -force -preserve -zc9 -zm8 -zs1 -f5 "$ORIGPNG"
+FINISHED_OPTIPNG=true
+
+zopflipng -y -m --filters=04me "$ORIGPNG" "$TEMPPNG" >$STDOUT
 mv -f "$TEMPPNG" "$ORIGPNG"
-cp --attributes-only --preserve=all "$BAKPNG" "$ORIGPNG"
-rm -f "$BAKPNG"
+STILL_WORKING=false
 
