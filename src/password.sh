@@ -3,7 +3,16 @@ set -e; set +H
 
 SHA3_256SUM=$(command -v sha3-256sum || printf '%s -a 256' $(command -v sha3sum))
 
+STORED_MHASH=/tmp/stored_mhash
 
+if [ -e "$STORED_MHASH" ] ; then
+	MHASH_AGE=$(perl -e 'print -M $ARGV[0]' "$STORED_MHASH")
+	if [ $(printf '%s > 0.25\n' $MHASH_AGE | bc) = "1" ] ; then
+		rm -f "$STORED_MHASH"
+	else
+		MHASH="$(xz -d --format=raw --lzma1=dict=8MiB,lc=3,lp=0,pb=2,mode=normal,nice=64,mf=bt4,depth=0 <"$STORED_MHASH")"
+	fi
+fi
 
 echo -n "Enter domain: "
 read -r domain
@@ -24,17 +33,6 @@ if [ -z "$maxlength" ] ; then
 elif [ ! "$maxlength" -ge 8 -o ! "$maxlength" -le 50 ] ; then
 	echo "Invalid maxlength: $maxlength" >&2
 	exit 1
-fi
-
-STORED_MHASH=/tmp/stored_mhash
-
-if [ -e "$STORED_MHASH" ] ; then
-	MHASH_AGE=$(perl -e 'print -M $ARGV[0]' "$STORED_MHASH")
-	if [ $(printf '%s > 0.25\n' $MHASH_AGE | bc) = "1" ] ; then
-		rm -f "$STORED_MHASH"
-	else
-		MHASH="$(xz -d --format=raw --lzma1=dict=8MiB,lc=3,lp=0,pb=2,mode=normal,nice=64,mf=bt4,depth=0 <"$STORED_MHASH")"
-	fi
 fi
 
 if [ -z "$MHASH" ] ; then
