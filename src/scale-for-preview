@@ -1,0 +1,7 @@
+#!/bin/sh
+
+fname="$1"
+tmpname=/tmp/"${fname##*/}"
+convert "$fname" -resize 1088x816 -filter mitchell "${tmpname%.*}".png
+cjpeg -q 97 <"${tmpname%.*}".png >"${tmpname%.*}".jpg
+rm -f "${tmpname%.*}".png
