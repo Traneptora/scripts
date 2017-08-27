@@ -12,10 +12,13 @@ START=""
 END=""
 ENCODER="libx264"
 BITRATE="vbr"
-FORMAT="yuv420p10le"
+FORMAT=""
 FFOPTS=""
 FILTER=""
-QP="16"
+QP=""
+SIZE=""
+FPS=""
+FFMPEG="ffmpeg"
 
 BAD_METADATA="BPS DURATION NUMBER_OF_FRAMES NUMBER_OF_BYTES _STATISTICS_WRITING_APP _STATISTICS_WRITING_DATE_UTC _STATISTICS_TAGS"
 BAD_MD_OPTS=""
@@ -53,53 +56,21 @@ process_option(){
 			case "$VALUE" in
 				nvenc)
 					ENCODER="h264_nvenc"
-					FORMAT="nv12"
-					QP=25
 					;;
 				h264)
 					ENCODER="h264_nvenc"
-					FORMAT="nv12"
-					QP=25
-					;;
-				h264_nvenc)
-					ENCODER="h264_nvenc"
-					FORMAT="nv12"
-					QP=25
 					;;
 				hevc)
 					ENCODER="hevc_nvenc"
-					FORMAT="p010le"
-					QP=25
-					;;
-				hevc_nvenc)
-					ENCODER="hevc_nvenc"
-					FORMAT="p010le"
-					QP=25
 					;;
 				x264)
 					ENCODER="libx264"
-					FORMAT="yuv420p10le"
-					QP=16
-					;;
-				libx264)
-					ENCODER="libx264"
-					FORMAT="yuv420p10le"
-					QP=16
 					;;
 				x265)
 					ENCODER="libx265"
-					FORMAT="yuv420p10le"
-					QP=16
-					;;
-				libx265)
-					ENCODER="libx265"
-					FORMAT="yuv420p10le"
-					QP=16
 					;;
 				*)
 					ENCODER="$VALUE"
-					FORMAT="yes"
-					QP=25
 					;;
 			esac
 			;;
@@ -109,6 +80,18 @@ process_option(){
 		ffopts)
 			FFOPTS="$FFOPTS $VALUE"
 			;;
+		ffmpeg)
+			FFMPEG="$VALUE"
+			;;
+		format)
+			FORMAT="$VALUE"
+			;;
+		size)
+			SIZE="$VALUE"
+			;;
+		fps)
+			FPS="$VALUE"
+			;;
 		filter)
 			if [ -z "$FILTER" ] ; then
 				FILTER="$VALUE"
@@ -117,13 +100,13 @@ process_option(){
 			fi
 			;;
 		pause)
-			>&2 echo "Warning: Ignoring --pause"
+			>&2 echo "Note: Ignoring --pause"
 			;;
 		mute)
-			>&2 echo "Warning: Ignoring --mute"
+			>&2 echo "Note: Ignoring --mute"
 			;;
 		qp)
-			QP="$QP"
+			QP="$VALUE"
 			;;
 		*)
 			>&2 echo "Invalid option: $NAME=$VALUE"
@@ -161,19 +144,55 @@ if [[ -z "$START" || -z "$END" ]] ; then
 	exit 1
 fi
 
-if [ -z "$FILTER" ] ; then
-	if [ "$FORMAT" = "yes" ] ; then
-		FILTER=""
-	else
-		FILTER="format=${FORMAT}"
-	fi
+if $FFMPEG -v panic -f lavfi -i nullsrc -vf zscale -frames 1 -f null -; then
+	SCALER=zscale=f=spline16:
 else
-	if [ "$FORMAT" = "yes" ] ; then
-		FILTER="${FILTER}"
-	else
+	SCALER=scale=
+fi
+
+if [ -z "$FORMAT" ] ; then
+	case $ENCODER in
+		libx26?|*_nvenc)
+			if $FFMPEG -v error -f lavfi -i nullsrc -pix_fmt p010le -c libx264 -frames 1 -f nut - | ffprobe -v error -show_entries stream=pix_fmt -of default=noprint_wrappers=1:nokey=1 -f nut -i - | grep -q -e '10le$'; then
+				FORMAT=p010le
+			else
+				FORMAT=nv12
+			fi
+			;;
+		*)
+			FORMAT="auto"
+			;;
+	esac
+fi
+
+if [ -z "$QP" ] ; then
+	case $ENCODER in
+		libx26?)
+			QP=16
+			;;
+		*)
+			QP=25
+			;;
+	esac
+fi
+
+if [ -n "$FPS" ] ; then
+	FILTER="${FILTER},fps=$FPS"
+fi
+
+if [ -n "$SIZE" ] ; then
+	FILTER="${FILTER},${SCALER}size=$SIZE"
+	if [ "$FORMAT" != "auto" ] ; then
 		FILTER="${FILTER},format=${FORMAT}"
 	fi
+else
+	if [ "$FORMAT" != "auto" ] ; then
+		FILTER="${FILTER},${SCALAR}w=iw:h=ih,format=${FORMAT}"
+	fi
 fi
+
+FILTER="${FILTER##,}"
+FILTER="${FILTER%%,}"
 
 time_duration_toseconds() {
 	awk -F: '{ n = 1; for (i = NF; i > 0; i--) { out = $i * n + out; n = n * 60 } print out }'
@@ -182,7 +201,7 @@ time_duration_toseconds() {
 STARTSECS="$(time_duration_toseconds <<<"$START")"
 ENDSECS="$(time_duration_toseconds <<<"$END")"
 
-DURATION="$(awk '{ print $2 - $1 }' <<<"$STARTSECS $ENDSECS")"
+DURATION=$(( $ENDSECS - $STARTSECS ))
 
 subslink=".clipvideo_subsymlink"
 
@@ -193,9 +212,12 @@ if [ "x$SUBS" = "xhard" ] ; then
 fi
 
 FORMATOPTS=""
+MATROSKA_COMPAT=false
 
 if [[ "$VIDEOOUTPUT" =~ \.(mkv|MKV)$ ]] ; then
+	MATROSKA_COMPAT=true
 	AUDIOOPTS="-c:a libopus -b:a 128k -ac 2"
+	VIDEOOUTPUT="$VIDEOOUTPUT".mkv
 elif [[ "$VIDEOOUTPUT" =~ \.(ts|TS)$ ]] ; then
 	AUDIOOPTS="-c:a libopus -b:a 128k -ac 2"
 elif [[ "$VIDEOOUTPUT" =~ \.(nut|NUT)$ ]] ; then
@@ -213,7 +235,7 @@ if [ "x$BITRATE" = "xvbr" ] ; then
 			BITRATEOPTS="-crf:v $QP"
 			;;
 		# These are lossless
-		ffvhuff|huffyuv|utvideo|ffv1)
+		ffvhuff|huffyuv|utvideo|ffv1|rawvideo|wrapped_avframe|png)
 			BITRATEOPTS=""
 			;;
 		*)
@@ -223,7 +245,6 @@ if [ "x$BITRATE" = "xvbr" ] ; then
 else
 	BITRATEOPTS="-b:v $BITRATE"
 fi
-
 
 case "$ENCODER" in
 	h264_nvenc)
@@ -241,7 +262,7 @@ case "$ENCODER" in
 		VIDEOOPTS="-c:v hevc_nvenc -gpu:v 0 -preset:v slow -profile:v main10 -tier:v 1 -rc-lookahead:v 54 -surfaces:v 64 -spatial_aq:v 1"
 		;;
 	ffv1)
-		VIDEOOPTS="-c:v ffv1 -level:v 3 -g 1 -slicecrc:v 1 -coder:v range_tab -slices:v 4 -threads:v 4"
+		VIDEOOPTS="-c:v ffv1 -level:v 3 -g:v 1 -slicecrc:v 1 -coder:v range_tab -slices:v 4 -threads:v 4"
 		;;
 	*)
 		VIDEOOPTS="-c:v $ENCODER"
@@ -252,20 +273,25 @@ FORMATOPTS="$FORMATOPTS $BAD_MD_OPTS"
 
 if [ "x$SUBS" = "ximage" ] ; then
 	set -x
-	time ffmpeg -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -lavfi "[0:v][0:s:${SID}]overlay,${FILTER},setpts=PTS-STARTPTS[v]" -map "[v]" -map "$AUDIOSTREAM" -t "$DURATION" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+	time "$FFMPEG" -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -lavfi "[0:v][0:s:${SID}]overlay,${FILTER},setpts=PTS-STARTPTS[v]" -map "[v]" -map "$AUDIOSTREAM" -t "$DURATION" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
 	set +x
 elif [ "x$SUBS" = "xsoft" ] ; then
 	set -x
-	time ffmpeg -ss "$START" -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -map 0:s:"$SID" -map t? -map d? -c copy -c:s ass -t "$DURATION" -vf "$FILTER" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+	time "$FFMPEG" -ss "$START" -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -map 0:s:"$SID" -map t? -map d? -c copy -c:s ass -t "$DURATION" -vf "$FILTER" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
 	set +x
 elif [ "x$SUBS" = "xhard" ] ; then
 	set -x
-	time ffmpeg -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -t "$DURATION" -vf "${FILTER},setpts=PTS-STARTPTS" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+	time "$FFMPEG" -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -t "$DURATION" -vf "${FILTER},setpts=PTS-STARTPTS" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
 	set +x
 else
 	set -x
-	time ffmpeg -ss "$START" -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -map t? -map d? -c copy -t "$DURATION" -vf "$FILTER" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+	time "$FFMPEG" -ss "$START" -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -map t? -map d? -c copy -t "$DURATION" -vf "$FILTER" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
 	set +x
+fi
+
+if $MATROSKA_COMPAT; then
+	mkvmerge --verbose -o "${VIDEOOUTPUT%.mkv}" "$VIDEOOUTPUT"
+	rm -f "$VIDEOOUTPUT"
 fi
 
 rm -f "$subslink"
