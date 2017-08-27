@@ -1,5 +1,101 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e; set +H
+
+# thebombzen's easy video clipping script
+#
+# Dependencies: These must be in your path
+# 1. bash (this is a bash script)
+# 2. ffmpeg
+# 3. awk
+# 4. mkvmerge (if outputting to matroska)
+#
+# Usage:
+#     clipvideo INPUT_FILENAME OUTPUT_FILENAME --start=START_TIMECODE --end=END_TIMECODE [options]
+#
+# This will create (and overwrite!) output_filename as input_filename but temporally clipped between the timecodes
+# Option order does not matter for the most part, and options can be inserted anywhere among the initial filenames, --start, and --end. 
+# If the same option is specified twice, the second one wins.
+# Some options can be specified more than once. See below.
+#
+# Note: To streamcopy rather than re-encode, it's much faster and there's no quality loss, but the timecodes will be inaccurate.
+# You will get more video and audio than you bargained for.
+# To do this, use:
+#     clipvideo INPUT_FILENAME OUTPUT_FILENAME --start=START_TIMECODE --end=END_TIMECODE --codec=copy --ffopts='-c copy'
+#
+# If you want to copy always, no matter what, then add this line to ~/.bashrc
+#     alias clipvideo='clipvideo --codec=copy --ffopts="-c copy"'
+#
+# Most options have very sane defaults (that's the point of the script, tbh).
+# You should not touch them unless you know why.
+#
+# Options:
+# --subs=VALUE
+#     VALUE can be hard, to burn the subtitles into the video
+#                  soft, to copy the subtitle stream and any attachments
+#                  image, to burn image subtitles into the video (this is hard to autodetect)
+#                  no (default), do not copy subtitles
+#
+# --ffmpeg=VALUE
+#     Path to FFmpeg, if it's not in the environment variable PATH.
+#     Allows you to select a specific one if more than one is installed.
+#     Default: ffmpeg
+#
+# --size=VALUE
+#     Scale the video to size VALUE. Give it in WxH. (e.g. 1280x720)
+#     Default: Same as input. (i.e. do nothing)
+#
+# --fps=VALUE
+#     Duplicate and drop frames to achieve the framerate VALUE.
+#     Default: Same as input. (i.e. do nothing)
+#
+# --format=VALUE
+#     Output to the pixel format VALUE.
+#     Warning: This is not the file format. The file format is autodetected from the filename.
+#     Default: Automatically select the appropriate output pixel format.
+#
+# --aid=VALUE
+#     VALUE is the index of the audio stream you want to clip.
+#     It starts at 0, not 1. Append '?' to make it not error if there's no audio.
+#     Default: 0?
+#
+# --sid=VALUE
+#     VALUE is the index of the subtitle stream you want to clip.
+#     It starts at 0, not 1. Append '?' to make it not error if there's no subtitles.
+#     Default: 0
+#
+# --codec=VALUE
+#     Set the video codec.
+#     These use libavcodec names. x264, x265, h264, and hevc are added as aliases, so these work.
+#     Default: libx264.
+#
+# --bitrate=VALUE
+#     Set the video bitrate in bits per second.
+#     Set to "vbr" to use VBR encoding for video.
+#     supports 'k' and 'M' as suffixes.
+#     Default: vbr
+#
+# --qp=VALUE
+#     Set the VBR quality. For x264 and x265, this is the CRF value. For others, it's a constant QP.
+#     Note: Lower is higher quality. Setting it to 0 is lossless.
+#     Note: This does absolutely nothing for lossless codecs.
+#     Default: CRF 16 for x264 and x265, 25 for others.
+#
+# --filter=VALUE
+#     Add a libavfilter-syntax video filtergraph.
+#     This option can be specified multiple times.
+#     Default: No video filter.
+#
+# --ffopts=VALUE
+#     Add extra options to the ffmpeg execution.
+#     This option can be specified multiple times.
+#     Default: No extra options.
+#
+# --pause
+#     Ignored. (mpv compatibility)
+#
+# --mute
+#     Ignored. (mpv compatibility)
+#
 
 VIDEOSTREAM="v"
 AUDIOSTREAM="a:0?"
@@ -58,10 +154,10 @@ process_option(){
 					ENCODER="h264_nvenc"
 					;;
 				h264)
-					ENCODER="h264_nvenc"
+					ENCODER="libx264"
 					;;
 				hevc)
-					ENCODER="hevc_nvenc"
+					ENCODER="libx265"
 					;;
 				x264)
 					ENCODER="libx264"
@@ -187,7 +283,7 @@ if [ -n "$SIZE" ] ; then
 	fi
 else
 	if [ "$FORMAT" != "auto" ] ; then
-		FILTER="${FILTER},${SCALAR}w=iw:h=ih,format=${FORMAT}"
+		FILTER="${FILTER},${SCALER}w=iw:h=ih,format=${FORMAT}"
 	fi
 fi
 
@@ -201,7 +297,7 @@ time_duration_toseconds() {
 STARTSECS="$(time_duration_toseconds <<<"$START")"
 ENDSECS="$(time_duration_toseconds <<<"$END")"
 
-DURATION=$(( $ENDSECS - $STARTSECS ))
+DURATION="$(awk '{ print $2 - $1 }' <<<"$STARTSECS $ENDSECS")"
 
 subslink=".clipvideo_subsymlink"
 
@@ -270,14 +366,21 @@ case "$ENCODER" in
 esac
 
 FORMATOPTS="$FORMATOPTS $BAD_MD_OPTS"
+FILTEROPTS=()
+if [ -n "$FILTER" ] ; then
+	FILTEROPTS+=("-vf")
+	FILTEROPTS+=("$FILTER")
+fi
+
 
 if [ "x$SUBS" = "ximage" ] ; then
+	if [ -n "$FILTER" ] ; then FILTER=",$FILTER"; fi
 	set -x
-	time "$FFMPEG" -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -lavfi "[0:v][0:s:${SID}]overlay,${FILTER},setpts=PTS-STARTPTS[v]" -map "[v]" -map "$AUDIOSTREAM" -t "$DURATION" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+	time "$FFMPEG" -ss "$START" -copyts -start_at_zero -i "$VIDEOINPUT" -lavfi "[0:v][0:s:${SID}]overlay,setpts=PTS-STARTPTS${FILTER}[v]" -map "[v]" -map "$AUDIOSTREAM" -t "$DURATION" -af "asetpts=PTS-STARTPTS" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
 	set +x
 elif [ "x$SUBS" = "xsoft" ] ; then
 	set -x
-	time "$FFMPEG" -ss "$START" -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -map 0:s:"$SID" -map t? -map d? -c copy -c:s ass -t "$DURATION" -vf "$FILTER" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+	time "$FFMPEG" -ss "$START" -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -map 0:s:"$SID" -map t? -map d? -c copy -c:s ass -t "$DURATION" "${FILTEROPTS[@]}" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
 	set +x
 elif [ "x$SUBS" = "xhard" ] ; then
 	set -x
@@ -285,7 +388,7 @@ elif [ "x$SUBS" = "xhard" ] ; then
 	set +x
 else
 	set -x
-	time "$FFMPEG" -ss "$START" -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -map t? -map d? -c copy -t "$DURATION" -vf "$FILTER" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
+	time "$FFMPEG" -ss "$START" -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -c copy -t "$DURATION" "${FILTEROPTS[@]}" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS -y "$VIDEOOUTPUT"
 	set +x
 fi
 
