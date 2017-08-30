@@ -1,0 +1,36 @@
+#!/bin/sh
+set -e; set +H
+
+this_exe="$0"
+
+usage(){
+	print_usage
+	exit 1
+}
+
+print_usage(){
+	printf '%s\n' "Usage: $(basename "$this_exe") <command>"
+}
+
+if [ $# -le 0 ] ; then
+	usage
+fi
+
+this_dir="$(dirname "$this_exe")"
+
+my_safe_comm="$(printf %s "$*" | tr -cd '[^A-Za-z0-9_\-\.]')"
+my_service="$HOME"/.config/systemd/user/launch-"$my_safe_comm".service
+cat >"$my_service" <<EOF
+[Unit]
+Description=Dummy Launch Service
+
+[Service]
+Type=simple
+Restart=never
+EOF
+echo "ExecStart=/usr/bin/env" "$@" >>"$my_service"
+echo "WorkingDirectory=$PWD" >>"$my_service"
+
+systemctl --user daemon-reload
+systemctl --user start launch-"$my_safe_comm".service
+rm -f "$my_service"
