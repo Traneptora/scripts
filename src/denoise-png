@@ -1,0 +1,18 @@
+#!/bin/sh
+set -e; if [ "bash" = "$(ps -e | grep $$ | sed -r 's/(\S+\s+)*(\S+)/\2/g')" ] ; then set +H; fi
+
+if [ -z "$1" ] ; then
+	>&2 echo "$(basename "$0") filename.png [ noise_level ] "
+	exit 1
+fi
+
+if [ -z "$2" ] ; then
+	LEVEL=2
+else
+	LEVEL="$2"
+fi
+
+TEMPFILE=$(mktemp --suffix=".png")
+waifu2x-converter-cpp --mode noise --noise_level "$LEVEL" -i "$1" -o "$TEMPFILE"
+mv -f "$TEMPFILE" "$1"
+rm -f "$TEMPFILE"

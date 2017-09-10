@@ -1,0 +1,42 @@
+#!/bin/sh
+set -e
+
+if [ $# -eq 0 ] ; then
+	echo "Usage: $(basename "$0") <URL> [curlopts]"
+	exit 0
+fi
+
+URL="$1"; shift
+TEMPDL="$(mktemp)"
+TEMPFIN="$(mktemp --suffix=.png)"
+TEMP_A="$(mktemp --suffix=.png)"
+
+# Download the file
+curl -o "$TEMPDL" --url "$URL" "$@"
+
+# We use a filter here because 4:2:0 jpegs need to be
+# upscaled to 4:4:4 before they can be converted to RGB
+# We're about to filter it, so depth 16 is a good idea
+convert -filter Lanczos2Sharp -depth 16 "$TEMPDL" "$TEMPFIN"
+rm -f "$TEMPDL"
+
+# Here's where we actually decrud it
+waifu2x-converter-cpp -i "$TEMPFIN" -o "$TEMP_A" --mode noise --noise_level 3
+
+# We add a small bit of selective blur for compression ratio
+# and we turn it back to an 8-bit png
+convert "$TEMP_A" -selective-blur 0x1+0.5% -depth 8 "$TEMPFIN"
+
+# remove the temporary file
+rm -f "$TEMP_A"
+
+# Re-encode the png to reduce filesize a little bit
+optipng -zc9 -zm8 -zs1 -f5 "$TEMPFIN"
+
+# Write the filename of the PNG file to stdout...
+printf 'Finished!\n%s\n' "$TEMPFIN"
+
+# ... and also copy it into the Rich X clipboard, so we can just paste it into whatever
+# Or upload with another script
+xclip -i -selection clipboard -t image/png <"$TEMPFIN"
+
