@@ -1,7 +1,7 @@
 #!/bin/sh
-set -e; set +H
+set -e
 
-SHA3_256SUM=$(command -v sha3-256sum || printf '%s -a 256' $(command -v sha3sum))
+SHA3_256SUM="$(command -v sha3-256sum || printf '%s -a 256' "$(command -v sha3sum)")"
 
 STORED_MHASH=/tmp/stored_mhash
 

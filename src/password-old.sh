@@ -1,4 +1,5 @@
 #!/bin/sh
+set -e
 
 echo -n "Enter domain: "
 read -r domain
