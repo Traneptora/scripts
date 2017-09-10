@@ -62,9 +62,9 @@ INWIDTH="$(identify -format '%w' "$INPUT")"
 
 if [ "$INHEIGHT" -gt 720 ] || [ "$INWIDTH" -gt 1280 ]; then
 	# It maintains aspect and fits it inside 1280x720
-	convert -filter Lanczos2Sharp -resize 1280x720 -depth 8 -selective-blur 0x1+1% "$TEMPFILE1" "$INPUT"
+	convert -filter Lanczos2Sharp -resize 1280x720 -depth 8 -selective-blur 0x1+0.5% "$TEMPFILE1" "$INPUT"
 else
-	convert -depth 8 -selective-blur 0x1+1% "$TEMPFILE1" "$INPUT"
+	convert -depth 8 -selective-blur 0x1+0.5% "$TEMPFILE1" "$INPUT"
 fi
 
 if $QUIET; then
