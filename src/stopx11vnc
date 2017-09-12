@@ -1,5 +1,2 @@
 #!/bin/sh
-
-daemon --stop --name=x11vnc
-
-
+exec persist stop x11vnc-wrapper

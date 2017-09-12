@@ -1,4 +1,2 @@
 #!/bin/sh
-
-exec daemon --name=x11vnc --inherit --safe --respawn --acceptable=10 --attempts=10 --delay=10 --limit=10 -- x11vnc-wrapper
-
+exec persist start x11vnc-wrapper
