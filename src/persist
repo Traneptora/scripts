@@ -9,10 +9,10 @@ usage(){
 }
 
 print_usage(){
-	printf '%s\n' "Usage: $(basename "$this_exe") <command>"
+	printf '%s\n' "Usage: $(basename "$this_exe") <mode> <command>"
 }
 
-if [ $# -le 0 ] ; then
+if [ $# -le 1 ] ; then
 	usage
 fi
 
