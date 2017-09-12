@@ -1,6 +1,6 @@
 #!/bin/sh
 
 OUTPUT="$(curl -s -S -F 'sprunge=<-' http://sprunge.us $@)"
-echo "$OUTPUT"
-echo -n "$OUTPUT" | xclip
+printf '%s\n' "$OUTPUT"
+printf '%s' "$OUTPUT" | xclip
 xclip -o -t text/plain | xclip -i -selection clipboard -t text/plain
