@@ -2,7 +2,7 @@
 set -e
 
 if [ $# -eq 0 ] ; then
-	echo "Usage: $(basename "$0") <URL> [curlopts]"
+	echo "Usage: $(basename "$0") <URL> [waifu2x opts]"
 	exit 0
 fi
 
@@ -12,7 +12,7 @@ TEMPFIN="$(mktemp --suffix=.png)"
 TEMP_A="$(mktemp --suffix=.png)"
 
 # Download the file
-curl -o "$TEMPDL" --url "$URL" "$@"
+curl -o "$TEMPDL" --url "$URL"
 
 # We use a filter here because 4:2:0 jpegs need to be
 # upscaled to 4:4:4 before they can be converted to RGB
@@ -21,7 +21,7 @@ convert -filter Lanczos2Sharp -depth 16 "$TEMPDL" "$TEMPFIN"
 rm -f "$TEMPDL"
 
 # Here's where we actually decrud it
-waifu2x-converter-cpp -i "$TEMPFIN" -o "$TEMP_A" --mode noise --noise_level 3
+waifu2x-denoiser --w2x=caffe --noise-level=4 "$TEMPFIN" "$TEMP_A" "$@"
 
 # We add a small bit of selective blur for compression ratio
 # and we turn it back to an 8-bit png
@@ -33,10 +33,17 @@ rm -f "$TEMP_A"
 # Re-encode the png to reduce filesize a little bit
 optipng -zc9 -zm8 -zs1 -f5 "$TEMPFIN"
 
-# Write the filename of the PNG file to stdout...
+# Write the filename of the PNG file to stdout
 printf 'Finished!\n%s\n' "$TEMPFIN"
 
-# ... and also copy it into the Rich X clipboard, so we can just paste it into whatever
-# Or upload with another script
-xclip -i -selection clipboard -t image/png <"$TEMPFIN"
+if [ -n "$DISPLAY" ] ; then
+	# copy it into the Rich X clipboard, so we can just paste it into whatever
+	# Or upload with another script
+	xclip -i -selection clipboard -t image/png <"$TEMPFIN"
 
+	# copy the filename into the Plain X clipboard
+	printf '%s' "$TEMPFIN" | xclip
+
+	# And preview it with Eye of Mate
+	eom "$TEMPFIN"
+fi

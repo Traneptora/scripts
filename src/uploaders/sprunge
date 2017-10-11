@@ -1,6 +1,6 @@
 #!/bin/sh
+. tbz-common.sh
+include tbz-uploader-common.sh
 
-OUTPUT="$(curl -s -S -F 'sprunge=<-' http://sprunge.us $@)"
-printf '%s\n' "$OUTPUT"
-printf '%s' "$OUTPUT" | xclip
-xclip -o -t text/plain | xclip -i -selection clipboard -t text/plain
+set -- -sS -F 'sprunge=<-' "--url" "http://sprunge.us" "$@"
+tbz_uploader_common "$@"

@@ -1,10 +1,12 @@
 #!/bin/sh
+. tbz-common.sh
+include tbz-uploader-common.sh
 
-filename="$1"
-shift
+if [ $# -lt 1 ] ; then
+	error "Invalid usage." "Usage: $this_script file_to_upload [curl opts]"
+fi
 
-OUTPUT="$(curl -F"file=@$filename" http://0x0.st "$@")"
-printf '%s\n' "$OUTPUT"
-printf '%s' "$OUTPUT" | xclip
-xclip -o -t text/plain | xclip -i -selection clipboard -t text/plain
+filename="$1"; shift
 
+set -- "-Ffile=@$filename" "--url" "https://0x0.st" "$@"
+tbz_uploader_common "$@"

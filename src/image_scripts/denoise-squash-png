@@ -1,47 +1,65 @@
-#!/bin/sh
-set -e; set +H
+#!/bin/bash
+. tbz-common.sh
 
-if [ -z "$1" ] ; then
-	>&2 echo "$0 filename.png"
-	exit 1
+if [ "$#" -lt 1 ] ; then
+	error "Insufficient arguments." "Usage: $this_script [options] filename.png"
 fi
 
-FINISHED_OPTIPNG=false
-FINISHED_ALL=false
-
-INPUT="$1"
 QUIET=false
-shift
+W2XARGS=()
+MULTI=false
+INPUT=""
+INPUTS=()
 
-for i; do
-	if [ "$i" = "--quiet" ] ; then
+for arg; do
+	if [ "$arg" = "--quiet" ] ; then
 		QUIET=true
+	elif [[ "$arg" =~ ^-- ]] ; then
+		W2XARGS+=("$arg")
+	elif [ -z "$INPUT" ] ; then
+		INPUT="$arg"
+		INPUTS+=("$arg")
 	else
-		LEVEL="$i"
+		INPUTS+=("$arg")
+		MULTI=true
 	fi
 done
 
-if $QUIET; then
+if check "$MULTI"; then
+	for INPUT in "${INPUTS[@]}"; do
+		if ! [ -e "$INPUT" ] ; then
+			error "Can't find: $INPUT"
+		fi
+	done
+	if check "$QUIET"; then
+		QUIETARG="--quiet"
+	else
+		QUIETARG=""
+	fi
+	for INPUT in "${INPUTS[@]}"; do
+		shecho "$this_script_abs" $QUIETARG "${W2XARGS[@]}" "$INPUT"
+	done | parallel --lb
+	exit 0
+fi
+
+if check "$QUIET"; then
 	STDOUT="/dev/null"
 	STDERR="/dev/null"
+	OQUIET="-quiet"
 else
 	STDOUT="/dev/stderr"
 	STDERR="/dev/stderr"
+	OQUIET=" "
 fi
 
-BAKPNG="$INPUT".denoisesquashpng_backup.$RANDOM
-while [ -e "$BAKPNG" ] ; do
-	BAKPNG="$BAKPNG".$RANDOM
-done
-
 clup() {
-	if $FINISHED_OPTIPNG ; then
-		if ! $FINISHED_ALL ; then >&2 echo "Received signal, cleaning up." ; fi
+	if check "$FINISHED_OPTIPNG" ; then
+		if ! $FINISHED_BOTH ; then note "Received signal, cleaning up." ; fi
 		cp --attributes-only --preserve=all "$BAKPNG" "$INPUT"
 		rm -f "$TEMPFILE1"
 		rm -f "$BAKPNG"
 	else
-		>&2 echo "Received signal, restoring from backup."
+		note "Received signal, restoring from backup."
 		cp --preserve=all "$BAKPNG" "$INPUT"
 		rm -f "$TEMPFILE1"
 		rm -f "$BAKPNG"
@@ -51,32 +69,33 @@ clup() {
 
 trap clup EXIT
 
+BAKPNG="$INPUT".denoisesquashpng_backup.$RANDOM
+while [ -e "$BAKPNG" ] ; do
+	BAKPNG="$BAKPNG".$RANDOM
+done
+
+FINISHED_OPTIPNG=false
+FINISHED_BOTH=false
+
 cp --preserve=all "$INPUT" "$BAKPNG"
 
 TEMPFILE1="$(mktemp --suffix=.png)"
 
-waifu2x-converter-cpp --mode noise --noise_level "$LEVEL" -i "$INPUT" -o "$TEMPFILE1" >$STDOUT
+waifu2x-denoiser --noise-level=2 "$INPUT" "$TEMPFILE1" "${W2XARGS[@]}" >"$STDOUT" 2>"$STDERR"
 
 INHEIGHT="$(identify -format '%h' "$INPUT")"
 INWIDTH="$(identify -format '%w' "$INPUT")"
 
 if [ "$INHEIGHT" -gt 720 ] || [ "$INWIDTH" -gt 1280 ]; then
 	# It maintains aspect and fits it inside 1280x720
-	convert -filter Lanczos2Sharp -resize 1280x720 -depth 8 -selective-blur 0x1+0.5% "$TEMPFILE1" "$INPUT"
+	convert -filter Catrom -resize 1280x720 -depth 8 "$TEMPFILE1" "$INPUT"
 else
-	convert -depth 8 -selective-blur 0x1+0.5% "$TEMPFILE1" "$INPUT"
-fi
-
-if $QUIET; then
-	OQUIET="-quiet"
-else
-	OQUIET=" "	
+	convert "$TEMPFILE1" -depth 8 "$INPUT"
 fi
 
 optipng $OQUIET -preserve -zc9 -zm8 -zs1 -f5 "$INPUT"
 FINISHED_OPTIPNG=true
 
-zopflipng -y -m --filters=04me "$INPUT" "$TEMPFILE1" >$STDOUT
+zopflipng -y -m --filters=04me "$INPUT" "$TEMPFILE1" >"$STDOUT" 2>"$STDERR"
 cp "$TEMPFILE1" "$INPUT"
-FINISHED_ALL=true
-
+FINISHED_BOTH=true

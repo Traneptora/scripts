@@ -1,27 +1,46 @@
 #!/usr/bin/env bash
-set -e; set +H
-
-if [ -z "$1" ] ; then
-	>&2 echo "$0 filename.png"
-	exit 1
-fi
+. tbz-common.sh
 
 FINISHED_OPTIPNG=false
 STILL_WORKING=true
 
-ORIGPNG="$1"
 QUIET=false
-shift
+MULTI=false
+INPUTS=()
+ORIGPNG=""
 
-for i; do
-	if [ "$i" = "--quiet" ] ; then
+for arg; do
+	if [ "$arg" = "--quiet" ] ; then
 		QUIET=true
+	elif [ -z "$ORIGPNG" ] ; then
+		ORIGPNG="$arg"
+		INPUTS+=("$ORIGPNG")
 	else
-		LEVEL="$i"
+		MULTI=true
+		INPUTS+=("$arg")
 	fi
 done
 
-if $QUIET; then
+if [ -z "$ORIGPNG" ] ; then
+	error "Usage: $(basename "$0") filename.png ..."
+fi
+
+if $MULTI; then
+	for INPUT in "${INPUTS[@]}"; do
+		if ! [ -e "$INPUT" ] ; then
+			error "Can't find: $INPUT"
+		fi
+	done
+	if $QUIET; then
+		QUIETARG="--quiet"
+	fi
+	for INPUT in "${INPUTS[@]}"; do
+		shecho "$0" $QUIETARG "$INPUT"
+	done | parallel --lb
+	exit 0
+fi
+
+if check "$QUIET"; then
 	STDOUT="/dev/null"
 	STDERR="/dev/null"
 else
@@ -29,7 +48,7 @@ else
 	STDERR="/dev/stderr"
 fi
 
-if $QUIET; then
+if check "$QUIET"; then
 	OQUIET="-quiet"
 else
 	OQUIET=" "	
@@ -46,15 +65,15 @@ while [ -e "$BAKPNG" ] ; do
 done
 
 clup() {
-	if $FINISHED_OPTIPNG ; then
+	if check "$FINISHED_OPTIPNG" ; then
 		if $STILL_WORKING ; then
-			>&2 echo "Received signal, cleaning up."
+			note "Received signal, cleaning up."
 		fi
 		rm -f "$TEMPPNG"
 		cp -f --attributes-only --preserve=all "$BAKPNG" "$ORIGPNG"
 		rm -f "$BAKPNG"
 	else
-		>&2 echo "Received signal, restoring from backup."
+		note "Received signal, restoring from backup."
 		cp --preserve=all "$BAKPNG" "$ORIGPNG"
 		rm -f "$TEMPPNG"
 		rm -f "$BAKPNG"

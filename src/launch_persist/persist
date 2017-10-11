@@ -1,5 +1,5 @@
 #!/bin/sh
-set -e; set +H
+set -e
 
 this_exe="$0"
 

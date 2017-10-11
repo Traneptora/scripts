@@ -1,7 +1,5 @@
 #!/bin/sh
-set -e; set +H
-
-this_exe="$0"
+. tbz-common.sh
 
 usage(){
 	print_usage
@@ -9,16 +7,14 @@ usage(){
 }
 
 print_usage(){
-	printf '%s\n' "Usage: $(basename "$this_exe") <command>"
+	printf '%s\n' "Usage: $this_script <command>"
 }
 
 if [ $# -le 0 ] ; then
 	usage
 fi
 
-this_dir="$(dirname "$this_exe")"
-
-my_safe_comm="$(printf %s "$*" | tr -cd '[^A-Za-z0-9_\-\.]')"
+my_safe_comm="$(readfrom "$*" tr -cd '[^A-Za-z0-9_\-\.]')"
 my_service="$HOME"/.config/systemd/user/launch-"$my_safe_comm".service
 cat >"$my_service" <<EOF
 [Unit]
