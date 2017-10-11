@@ -20,10 +20,10 @@
 # Note: To streamcopy rather than re-encode, it's much faster and there's no quality loss, but the timecodes will be inaccurate.
 # You will get more video and audio than you bargained for.
 # To do this, use:
-#     clipvideo INPUT_FILENAME OUTPUT_FILENAME --start=START_TIMECODE --end=END_TIMECODE --codec=copy --ffopts='-c copy'
+#     clipvideo INPUT_FILENAME OUTPUT_FILENAME --start=START_TIMECODE --end=END_TIMECODE --codec=copy --acodec=copy --ffopts='-c copy'
 #
 # If you want to copy always, no matter what, then add this line to ~/.bashrc
-#     alias clipvideo='clipvideo --codec=copy --ffopts="-c copy"'
+#     alias clipvideo='clipvideo --codec=copy --acodec copy --ffopts="-c copy"'
 #
 # Most options have very sane defaults (that's the point of the script, tbh).
 # You should not touch them unless you know why.
@@ -61,11 +61,11 @@
 # --sid=VALUE
 #     VALUE is the index of the subtitle stream you want to clip.
 #     It starts at 0, not 1. Append '?' to make it not error if there's no subtitles.
-#     Default: 0
+#     Default: 0?
 #
 # --codec=VALUE
 #     Set the video codec.
-#     These use libavcodec names. x264, x265, h264, and hevc are added as aliases, so these work.
+#     These use libavcodec names. Most common names are added as aliases.
 #     Default: libx264.
 #
 # --bitrate=VALUE
@@ -74,11 +74,11 @@
 #     supports 'k' and 'M' as suffixes.
 #     Default: vbr
 #
-# --qp=VALUE
-#     Set the VBR quality. For x264 and x265, this is the CRF value. For others, it's a constant QP.
+# --quality=VALUE
+#     Set the VBR quality. For x264, x265, vp8, and vp9, this is the CRF value. For others, it's a constant QP.
 #     Note: Lower is higher quality. Setting it to 0 is lossless.
-#     Note: This does absolutely nothing for lossless codecs.
-#     Default: CRF 16 for x264 and x265, 25 for others.
+#     Note: This option does absolutely nothing for lossless codecs.
+#     Default: CRF 16 for x264, x265, vp8, and vp9. QP 25 for others.
 #
 # --filter=VALUE
 #     Add a libavfilter-syntax video filtergraph.
@@ -192,7 +192,7 @@ process_option(){
 		pixel-format)
 			PIXEL_FORMAT="$VALUEL"
 			;;
-		size)
+		size|geometry)
 			SIZE="$VALUEL"
 			;;
 		fps)
@@ -200,6 +200,16 @@ process_option(){
 			;;
 		filter)
 			FILTER="$FILTER,$VALUE"
+			;;
+		vf)
+			note "Using vf=lavfi compatibility."
+			if matches "$VALUE" '^lavfi=".*"$' ; then
+				VALUE="${VALUE#lavfi=\"}"
+				VALUE="${VALUE%\"}"
+				FILTER="$FILTER,$VALUE"
+			else
+				error 'Only vf=lavfi is an alias for "filter"'
+			fi
 			;;
 		afilter)
 			AFILTER="$AFILTER,$VALUE"
@@ -236,17 +246,15 @@ process_option(){
 			SPEED="$VALUE"
 			;;
 		force)
-			note "Enabling advanced mode. Errors are your fault!"
+			warning "Disabling sanity checks and aliases. Errors are your fault!"
 			FORCE="true"
 			;;
-		pause)
-			note "Ignoring --pause"
-			;;
-		mute)
-			note "Ignoring --mute"
+		# mpv compatibility
+		pause|mute|loop-playlist|loop-file)
+			note "Ignoring --${NAME}"
 			;;
 		*)
-			error "Invalid option: $NAME=$VALUE"
+			error "Invalid option: $NAME"
 			;;
 	esac
 }
