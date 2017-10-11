@@ -2,11 +2,20 @@
 . tbz-common.sh
 include tbz-uploader-common.sh
 
-if [ $# -lt 1 ] ; then
-	error "Invalid usage." "Usage: $this_script file_to_upload [curl opts]"
-fi
 
-filename="$1"; shift
+
+if [ $# -lt 1 ] ; then
+	reading_from_stdin="true"
+	filename="$(mktemp --suffix=.log)"
+	cat >"$filename"
+else
+	reading_from_stdin="false"
+	filename="$1"; shift
+fi
 
 set -- "-Ffile=@$filename" "--url" "https://0x0.st" "$@"
 tbz_uploader_common "$@"
+
+if check "$reading_from_stdin" ; then
+	rm -f "$filename"
+fi
