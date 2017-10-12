@@ -8,7 +8,6 @@ shell_is_interactive=false
 case "$-" in
 	*i*)
 		shell_is_interactive=true
-		printf "%s\n" "Refusing to run in an interactive shell."
 		;;
 	*) 
 		shell_is_interactive=false
@@ -18,15 +17,8 @@ case "$-" in
 		;;
 esac
 
-# We will not load the header into an interactive shell
-if [ "$shell_is_interactive" != "true" ] && [ -z ${TBZ_COMMON_H+x} ] ; then #ifndef TBZ_COMMON_H
-TBZ_COMMON_H="true" #define TBZ_COMMON_H
-
-this_script_fullname="$0"
-this_script="$(basename "$this_script_fullname")"
-this_script_dirname="$(dirname "$this_script_fullname")"
-this_script_abs="$(readlink -f "$this_script_fullname")"
-this_script_abs_dirname="$(dirname "$this_script_abs")"
+if [ -z ${TBZ_COMMON_H_+x} ] ; then #ifndef TBZ_COMMON_H_
+TBZ_COMMON_H_="true" #define TBZ_COMMON_H_
 
 print_oneline_warning_message() {
 	local message="$*"
@@ -76,7 +68,11 @@ error_nonfatal(){
 
 error(){
 	error_nonfatal "$@"
-	exit 1
+	if check "$shell_is_interactive" ; then
+		return 1
+	else
+		exit 1
+	fi
 }
 
 warning(){
@@ -214,6 +210,8 @@ parse_arguments(){
 	done
 }
 
+# Includes a file that doesn't have to be in PATH
+# It could also be in the same directory as the file doing the including
 include(){
 	local included_file="$1"
 	if command -p -v "$this_script_dirname"/"$included_file" >/dev/null ; then
@@ -227,5 +225,57 @@ include(){
 	fi
 }
 
-fi #endif TBZ_COMMON_H
+value_of(){
+	# THE VALUUUUEEE
+	eval "local the_value=\"\${${1}}\""
+	printf '%s' "$the_value"
+}
+
+replace_ends_char_(){
+	if matches "$ends_char" '/' ; then
+		ends_char="$(readfrom "$ends_char" sed 's:/:\\/:')"
+	fi
+}
+
+chomp_char_from_head(){
+	local ends_char="$1"; shift
+	replace_ends_char_
+	readfrom "$*" sed "s/^[${ends_char}]*//g"
+}
+
+chomp_char_from_tail(){
+	local ends_char="$1"; shift
+	replace_ends_char_
+	readfrom "$*" sed "s/[${ends_char}]*\$//g"
+}
+
+chomp_char_from_ends(){
+	local ends_char="$1"; shift
+	replace_ends_char_
+	readfrom "$*" sed "s/^[${ends_char}]*//g; s/[${ends_char}]*\$//g"
+}
+
+add_dir_to_export_env(){
+	if is_set env_var; then
+		local new_value="$(chomp_char_from_tail '/' "$*")"
+		local curr_value="$(chomp_char_from_ends ':' "$(value_of "$env_var")")"
+		if is_set prepend && check "$prepend"; then
+			eval "export ${env_var}=${new_value}:${curr_value}"
+		else
+			eval "export ${env_var}=${curr_value}:${new_value}"
+		fi
+	else
+		error "Pass an env_var" "Example: env_var=PATH prepend=true add_dir_to_export_env $HOME/bin"
+	fi
+}
+
+if ! check "$shell_is_interactive" ; then
+	this_script_fullname="$0"
+	this_script="$(basename "$this_script_fullname")"
+	this_script_dirname="$(dirname "$this_script_fullname")"
+	this_script_abs="$(readlink -f "$this_script_fullname")"
+	this_script_abs_dirname="$(dirname "$this_script_abs")"
+fi
+
+fi #endif TBZ_COMMON_H_
 
