@@ -1,0 +1,3 @@
+#!/usr/bin/perl -ln
+my @lines = <>;
+print(unpack("%128Q*", pack("Q*", @lines)));
