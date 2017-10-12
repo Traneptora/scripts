@@ -1,1 +1,0 @@
-../src/password/password-old.sh
