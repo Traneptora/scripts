@@ -46,16 +46,16 @@ int main(int argc, char *argv[]) {
 		if (success == 0){
 			printf("%08X\n", crc);
 		} else {
-			fprintf(stderr, "%s: %s\n", "crc32", error);
+			fprintf(stderr, "%s: %s: %s\n", "crc32", argv[1], error);
 			ret = 2;
 		}
 	} else {
 		for (int i = 1; i < argc; i++){
-			success = tbz_compute_file_crc32(argv[1], &crc, &error);
+			success = tbz_compute_file_crc32(argv[i], &crc, &error);
 			if (success == 0){
 				printf("%s 0x%08X\n", argv[i], crc);
 			} else {
-				fprintf(stderr, "%s: %s\n", "crc32", error);
+				fprintf(stderr, "%s: %s: %s\n", "crc32", argv[i], error);
 				ret = 2;
 				continue;
 			}
