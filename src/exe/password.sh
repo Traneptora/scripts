@@ -1,15 +1,17 @@
 #!/bin/sh
 . tbz-common.sh
 
-SHA3_256SUM="$(command -v sha3-256sum || printf '%s -a 256' "$(shecho "$(command -v sha3sum)")")"
+shecho "$(command -v sha3sum)"
+
+SHA3_256SUM="$(command -v sha3-256sum || printf '%s -a 256' "$___")"
 
 if is_unset STORED_MHASH ; then
 	STORED_MHASH=/tmp/stored_mhash
 fi
 
 if [ -e "$STORED_MHASH" ] ; then
-	MHASH_AGE=$(perl -e 'print -M $ARGV[0]' "$STORED_MHASH")
-	if [ $(awk "BEGIN { print ( $MHASH_AGE > 0.25 ) }") = "1" ] ; then
+	MHASH_AGE="$(perl -e 'print -M $ARGV[0]' "$STORED_MHASH")"
+	if is_gt "$MHASH_AGE" 0.25 ; then
 		rm -f "$STORED_MHASH"
 	else
 		MHASH="$(xz -d --format=raw --lzma1=dict=8MiB,lc=3,lp=0,pb=2,mode=normal,nice=64,mf=bt4,depth=0 <"$STORED_MHASH")"

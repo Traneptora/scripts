@@ -1,5 +1,6 @@
-#!/bin/bash
+#!/bin/sh
 . tbz-common.sh
+#set -x
 
 # thebombzen's easy video clipping script
 #
@@ -132,6 +133,13 @@ SPEEDCHANGER=""
 AAC_ENCODER="aac"
 STARTOPTS=""
 
+remove_subslink(){
+	rm -f "$subslink"
+}
+
+add_cleanup_routine remove_subslink
+
+
 BAD_METADATA="BPS DURATION NUMBER_OF_FRAMES NUMBER_OF_BYTES _STATISTICS_WRITING_APP _STATISTICS_WRITING_DATE_UTC _STATISTICS_TAGS"
 BAD_MD_OPTS=""
 
@@ -142,8 +150,8 @@ done
 process_option(){
 	NAME="$1"
 	VALUE="$2"
-	NAMEL="$(tolower "$NAME")"
-	VALUEL="$(tolower "$VALUE")"
+	NAMEL="$(__ tolower "$NAME")"
+	VALUEL="$(__ tolower "$VALUE")"
 	case "$NAMEL" in
 		subs)
 			case "$VALUEL" in
@@ -202,8 +210,8 @@ process_option(){
 			FILTER="$FILTER,$VALUE"
 			;;
 		vf)
-			note "Using vf=lavfi compatibility."
 			if matches "$VALUE" '^lavfi=".*"$' ; then
+				note "Using vf=lavfi compatibility."
 				VALUE="${VALUE#lavfi=\"}"
 				VALUE="${VALUE%\"}"
 				FILTER="$FILTER,$VALUE"
@@ -302,6 +310,10 @@ if fmatches "$SUBS" 'image' 'hard' && [ "$VENCODER" = "copy" ] ; then
 	error "Cannot codec copy when hardsubbing."
 fi
 
+if matches "$PIXEL_FORMAT" '^nv' '^p0' ; then
+	error "Use planar pixel formats."
+fi
+
 grep_args="-i"
 if [ -z "$CONTAINER" ] ; then
 	if matches "$VIDEOOUTPUT" '\.(mkv|mka|mk3d|mks)$' ; then
@@ -321,7 +333,7 @@ if [ -z "$CONTAINER" ] ; then
 	else
 		CONTAINER="auto"
 	fi
-elif ! check "$FORCE" ; then
+elif ! checkvar FORCE ; then
 	case "$CONTAINER" in
 		mkv|mka|mk3d|mks)
 			warning "$CONTAINER is an alias for matroska."
@@ -366,7 +378,7 @@ if [ -z "$AENCODER" ] ; then
 	esac
 fi
 
-if ! check "$FORCE" ; then case "$AENCODER" in
+if ! checkvar FORCE ; then case "$AENCODER" in
 	mp3)
 		note "$AENCODER is an alias for libmp3lame."
 		AENCODER="libmp3lame"
@@ -376,8 +388,8 @@ if ! check "$FORCE" ; then case "$AENCODER" in
 		AENCODER="libopus"
 		;;
 	libvo-aacenc|libvo_aacenc)
-		warning "$AENCODER is an alias for 'aac' because $AENCODER is unbelievably terrible."
-		AENCODER="aac"
+		warning "$AENCODER is an alias for '$AAC_ENCODER' because $AENCODER is unbelievably terrible."
+		AENCODER="$AAC_ENCODER"
 		;;
 	vorbis)
 		note "$AENCODER is an alias for libvorbis."
@@ -415,13 +427,13 @@ FORMATOPTS="$FORMATOPTS -f $CONTAINER"
 
 case "$CONTAINER" in
 	matroska)
-		if check "$USE_MKVMERGE"; then
+		if checkvar USE_MKVMERGE; then
 			VIDEOOUTPUT="$VIDEOOUTPUT".mkv
 		fi
 		SENCODER="ass"
 		;;
 	webm)
-		if check "$USE_MKVMERGE" ; then
+		if checkvar USE_MKVMERGE ; then
 			VIDEOOUTPUT="$VIDEOOUTPUT".webm
 		fi
 		SENCODER="webvtt"
@@ -431,23 +443,23 @@ case "$CONTAINER" in
 		if [ "$AENCODER" = "libopus" ] ; then
 			FORMATOPTS="$FORMATOPTS -strict experimental"
 		fi
-		if check "$REMUX_MOVMP4" ; then
+		if checkvar REMUX_MOVMP4 ; then
 			VIDEOOUTPUT="$VIDEOOUTPUT".nut
 			FORMATOPTS="$FORMATOPTS -f nut"
 		fi
 		SENCODER="mov_text"
 		;;
 	mov)
-		if check "$REMUX_MOVMP4" ; then
+		FORMATOPTS="$FORMATOPTS -movflags +faststart"
+		if checkvar REMUX_MOVMP4 ; then
 			VIDEOOUTPUT="$VIDEOOUTPUT".nut
-		else
-			FORMATOPTS="$FORMATOPTS -movflags +faststart"
+			FORMATOPTS="$FORMATOPTS -f nut"
 		fi
 		SENCODER="mov_text"
 		;;
 esac
 
-if ! check "$FORCE" ; then case "$VENCODER" in
+if ! checkvar FORCE ; then case "$VENCODER" in
 	nvenc|nvenc_h264)
 		warning "$VENCODER is a deprecated alias for h264_nvenc."
 		VENCODER="h264_nvenc"
@@ -533,7 +545,7 @@ case "$VENCODER" in
 		;;
 esac
 
-if [ $(num_compare "$SPEED" 1.0) -ne 0 ] ; then
+if [ "$(__ num_compare "$SPEED" 1.0)" -ne 0 ] ; then
 	if ffmpeg -v error -f lavfi -i anullsrc -af rubberband=tempo=0.5 -t 1 -f null -; then
 		SPEEDSCALER="rubberband=tempo="
 	else
@@ -546,10 +558,10 @@ fi
 if [ -z "$PIXEL_FORMAT" ] ; then
 	case "$VENCODER" in
 		*_nvenc)
-			if ffmpeg -v error -f lavfi -i yuvtestsrc -vf scale,format=p010le -pix_fmt p010le -c "$VENCODER" -frames 1 -f nut - | ffprobe -v error -show_entries stream=pix_fmt -of default=noprint_wrappers=1:nokey=1 -f nut -i - | grep -q -e '10le$'; then
-				PIXEL_FORMAT=p010le
+			if ffmpeg -v error -f lavfi -i yuvtestsrc -vf scale,format=yuv420p10le -pix_fmt yuv420p10le -c "$VENCODER" -frames 1 -f nut - | ffprobe -v error -show_entries stream=pix_fmt -of default=noprint_wrappers=1:nokey=1 -f nut -i - | grep -q -e '10le$'; then
+				PIXEL_FORMAT=yuv420p10le
 			else
-				PIXEL_FORMAT=nv12
+				PIXEL_FORMAT=yuv420p
 			fi
 			;;
 		libx26?)
@@ -570,12 +582,12 @@ if ffmpeg -v panic -f lavfi -i yuvtestsrc -vf zscale -frames 1 -f null -; then
 		if matches "$PIXEL_FORMAT" 'bgr' 'rgb' 'gbr' 'bayer' ; then
 			printf 'zscale=%s:f=spline36:range=pc' "$1"
 		else
-			printf 'zscale=%s:f=spline36:range=tv:matrix=709' "$1"
+			printf 'zscale=%s:f=spline36:range=tv' "$1"
 		fi
 	}
 else
 	scaler(){
-		printf 'scale=%s:interl=-1:flags=lanczos' "$(readfrom "$1" tr 'x' ':')"
+		printf 'scale=%s:interl=-1:flags=lanczos' "$(__ readfrom "$1" tr 'x' ':')"
 	}
 fi
 
@@ -594,12 +606,12 @@ if [ "$PIXEL_FORMAT" != "auto" ] ; then
 	if matches "$PIXEL_FORMAT" 'bgr' 'rgb' 'gbr' 'bayer' ; then
 		FORMATOPTS="$FORMATOPTS -color_range pc"
 	else
-		FORMATOPTS="$FORMATOPTS -color_range tv -colorspace bt709"
+		FORMATOPTS="$FORMATOPTS -color_range tv"
 	fi
 fi
 
 time_duration_toseconds() {
-	readfrom "$1" awk -F: '{ n = 1; for (i = NF; i > 0; i--) { out = $i * n + out; n = n * 60 } print out }'
+	__ readfrom "$1" awk -F: '{ n = 1; for (i = NF; i > 0; i--) { out = $i * n + out; n = n * 60 } print out }'
 }
 
 STARTSECS="$(time_duration_toseconds "$START")"
@@ -610,13 +622,12 @@ if [ -n "$END" ] ; then
 fi
 
 if [ "$SUBS" = "hard" ] ; then
-	rm -f "$subslink"
-	ln -s "$VIDEOINPUT" "$subslink"
+	ln -sf "$VIDEOINPUT" "$subslink"
 fi
 
 FILTER="${FILTER##,}"
 FILTER="${FILTER%%,}"
-FILTER="$(readfrom "$FILTER" sed -r 's/,+/,/g')"
+FILTER="$(__ readfrom "$FILTER" sed -r 's/,+/,/g')"
 
 FORMATOPTS="$FORMATOPTS $BAD_MD_OPTS"
 
@@ -631,44 +642,43 @@ case "$SUBS" in
 		;;
 esac
 
-FILTEROPTS=()
-
-if [ "$VENCODER" != "copy" ] ; then
-	FILTEROPTS+=("-vf")
-	FILTEROPTS+=("$FILTER")
-fi
-
-if [ "$AENCODER" != "copy" ] ; then
-	FILTEROPTS+=("-af")
-	FILTEROPTS+=("$AFILTER")
-fi
-
-if [ -n "$END" ] ; then
-	DUROPTS="-t $DURATION"
-else
-	DUROPTS=""
-fi
-
-if [ $(num_compare "$STARTSECS" 0) -gt 0 ] ; then
+if is_gt "$STARTSECS" 0 ; then
 	STARTOPTS="-ss $STARTSECS"
 	if [ "$SUBS" = "image" ] || [ "$SUBS" = "hard" ] ; then
 		STARTOPTS="$STARTOPTS -copyts -start_at_zero"
 	fi
 fi
 
-if [ "$SUBS" = "image" ] ; then
-	if [ -n "$FILTER" ] ; then FILTER=",$FILTER"; fi
-	time ffmpeg_v -hide_banner -y $STARTOPTS -i "$VIDEOINPUT" -map "$AUDIOSTREAM" $DUROPTS "${FILTEROPTS[@]}" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS "$VIDEOOUTPUT"
-elif [ "$SUBS" = "soft" ] ; then
-	time ffmpeg_v -hide_banner -y $STARTOPTS -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -map s:"$SID" -map t? -map d? -c copy -c:s "$SENCODER" $DUROPTS "${FILTEROPTS[@]}" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS "$VIDEOOUTPUT"
-elif [ "$SUBS" = "hard" ] ; then
-	if [ -n "$FILTER" ] ; then FILTER=",$FILTER"; fi
-	time ffmpeg_v -hide_banner -y $STARTOPTS -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" $DUROPTS "${FILTEROPTS[@]}" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS "$VIDEOOUTPUT"
-else
-	time ffmpeg_v -hide_banner -y $STARTOPTS -i "$VIDEOINPUT" -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -c copy $DUROPTS "${FILTEROPTS[@]}" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS "$VIDEOOUTPUT"
+set --
+
+if [ -n "$END" ] ; then
+	set -- "$@" "-t" "$DURATION"
 fi
 
-if check "$USE_MKVMERGE" && fmatches "$CONTAINER" matroska webm ; then
+if [ "$VENCODER" != "copy" ] ; then
+	set -- "$@" "-vf" "$FILTER"
+fi
+
+if [ "$AENCODER" != "acopy" ] ; then
+	set -- "$@" "-af" "$AFILTER"
+fi
+
+if [ "$SUBS" = "image" ] ; then
+	set -- -map "$AUDIOSTREAM" "$@"
+elif [ "$SUBS" = "soft" ] ; then
+	set -- -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -map s:"$SID" -map t? -map d? -c copy -c:s "$SENCODER" "$@"
+elif [ "$SUBS" = "hard" ] ; then
+	if [ -n "$FILTER" ] ; then FILTER=",$FILTER"; fi
+	set -- -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" "$@"
+else
+	set -- -map "$VIDEOSTREAM" -map "$AUDIOSTREAM" -c copy "$@"
+fi
+
+set -- "-hide_banner" "-y" $STARTOPTS -i "$VIDEOINPUT" "$@" $VIDEOOPTS $BITRATEOPTS $AUDIOOPTS $FORMATOPTS $FFOPTS "$VIDEOOUTPUT"
+
+ffmpeg_v "$@"
+
+if checkvar USE_MKVMERGE && fmatches "$CONTAINER" matroska webm ; then
 	MKVMERGEOPTS="--verbose"
 	if [ -n "$FPS" ] ; then
 		MKVMERGEOPTS="$MKVMERGEOPTS --default-duration 0:${FPS}fps"
@@ -677,10 +687,7 @@ if check "$USE_MKVMERGE" && fmatches "$CONTAINER" matroska webm ; then
 	rm -f "$VIDEOOUTPUT"
 fi
 
-if check "$REMUX_MOVMP4" && fmatches "$CONTAINER" mov mp4; then
+if checkvar REMUX_MOVMP4 && fmatches "$CONTAINER" mov mp4; then
 	ffmpeg -hide_banner -y -i "$VIDEOOUTPUT" -map 0 -c copy $FORMATOPTS -f "$CONTAINER" "${VIDEOOUTPUT%.nut}"
 	rm -f "$VIDEOOUTPUT"
 fi
-
-rm -f "$subslink"
-

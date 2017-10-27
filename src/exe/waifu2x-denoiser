@@ -1,6 +1,5 @@
 #!/bin/bash
-set -e
-source "$(which tbz-common.sh)"
+. tbz-common.sh
 
 if [ $# -le 1 ] ; then
 	echo "$(basename $0) file_in file_out [--noise-level=X] [--scale-ratio=X] [--type={anime,photo}] [--gpu=X] [--w2x={caffe,w2xc}]"
@@ -27,7 +26,7 @@ for arg; do
 	elif [[ "$arg" =~ ^--w2x= ]] ; then
 		W2X="${arg#--w2x=}"
 	elif [ -z "$fname" ] ; then
-		fname="$(readlink -f "$arg")"
+		fname="$arg"
 	elif [ -z "$file_out" ] ; then
 		file_out="$arg"
 	else
@@ -77,14 +76,11 @@ if [ -z "$gpu" ] ; then
 fi
 
 clup() {
-	rm -f "$tempout"
-	rm -f "$tempoutp"
-	rm -f "$tempscript"
 	rm -f "$tempin".ffindex
 	rm -f "$tempin"
 }
 
-trap clup EXIT
+add_cleanup_routine clup
 
 #fname="$(readlink -f "$1")"
 #file_out="$2"
@@ -94,14 +90,14 @@ trap clup EXIT
 #pix_fmt=$(ffprobe -v error -show_entries stream=pix_fmt -of default=noprint_wrappers=1:nokey=1 "$fname")
 
 
-tempoutp="$(mktemp --suffix=.png)"
-tempout="$(mktemp --suffix=.raw)"
-tempin="$(mktemp --suffix=.png)"
+_return_var=tempoutp temp_suffix=png create_temp_file
+_return_var=tempout temp_suffix=raw create_temp_file
+_return_var=tempin temp_suffix=png create_temp_file
+_return_var=tempscript temp_suffix=vpy create_temp_file
 
-tempscript="$(mktemp --suffix=.vpy)"
 cat >"$tempscript" <<EOF
 import vapoursynth as vs
-core = vs.get_core()
+core = vs.core
 
 # waifu2x-w2xc requires RGBS
 # RGBS is Single Precision RGB float, i.e. rgb32f
@@ -124,13 +120,15 @@ if (have_alpha):
 	aclip = core.resize.Point(aclip, format=vs.GRAYS, range_in_s='full', range_s='full')
 EOF
 
-if check "$CAFFE"; then
+if checkvar CAFFE; then
 # start waifu2x-caffe
 cat >>"$tempscript" <<EOF
 # The noise level is off by 1
 rgbclip = core.caffe.Waifu2x(rgbclip, noise=(int(noise_level) - 1), scale=int(scale_ratio), model=(4 if (photo == 'True') else 3), processor=(0 if (int(gpu) < 0) else int(gpu)))
 if (have_alpha):
 	aclip = core.caffe.Waifu2x(aclip, noise=(int(noise_level) - 1), scale=int(scale_ratio), model=(4 if (photo == 'True') else 3), processor=(0 if (int(gpu) < 0) else int(gpu)))
+else:
+	aclip = core.std.BlankClip(rgbclip, format=vs.GRAYS, color=[1.0])
 EOF
 # end waifu2x-caffe
 else
@@ -139,14 +137,13 @@ cat >>"$tempscript" <<EOF
 rgbclip = core.w2xc.Waifu2x(rgbclip, noise=int(noise_level), scale=int(scale_ratio), photo=(photo == 'True'), processor=int(gpu))
 if (have_alpha):
 	aclip = core.w2xc.Waifu2x(aclip, noise=int(noise_level), scale=int(scale_ratio), photo=(photo == 'True'), processor=int(gpu))
+else:
+	aclip = core.std.BlankClip(rgbclip, format=vs.GRAYS, color=[1.0])
 EOF
 # end waifu2x-w2xc
 fi
 
 cat >>"$tempscript" <<EOF
-else:
-	aclip = core.std.BlankClip(rgbclip, format=vs.GRAYS, color=[1.0])
-
 rgbclip = core.resize.Bilinear(rgbclip, format=vs.RGB24, range_in_s='full', range_s='full')
 aclip = core.resize.Bilinear(aclip, format=vs.GRAY8, range_in_s='full', range_s='full')
 clip = core.std.Splice([get_plane(rgbclip, 1), get_plane(rgbclip, 2), get_plane(rgbclip, 0), aclip])
@@ -155,7 +152,7 @@ EOF
 
 convert "$fname" "$tempin"
 
-function runwaifu2x(){
+runwaifu2x(){
 
 	width=$(identify -format '%w' "$tempin")
 	height=$(identify -format '%h' "$tempin")

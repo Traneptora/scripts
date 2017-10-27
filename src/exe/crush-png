@@ -31,8 +31,10 @@ if $MULTI; then
 			error "Can't find: $INPUT"
 		fi
 	done
-	if $QUIET; then
+	if check "$QUIET"; then
 		QUIETARG="--quiet"
+	else
+		QUIETARG=""
 	fi
 	for INPUT in "${INPUTS[@]}"; do
 		shecho "$0" $QUIETARG "$INPUT"

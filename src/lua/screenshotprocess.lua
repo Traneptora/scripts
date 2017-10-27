@@ -43,7 +43,7 @@ mp.register_script_message("screenshot_write_inaccurate", function (stype)
         -- mp.commandv("screenshot-to-file", pngfpath, stype)
         mp.commandv("screenshot-to-file", fpath, stype)
         mp.commandv("show-text", string.format("Screenshot: '%s'", fname))
-		mp.commandv("run", "/usr/bin/env", "denoise-squash-png", "--quiet", "--gpu=1", "--w2x=caffe", "--noise-level=2", "--type=anime", fpath);
+		mp.commandv("run", "/usr/bin/env", "denoise-squash-png", "--quiet", "--gpu=1", "--w2x=w2xc", "--noise-level=2", "--type=anime", fpath);
     end
 end)
 

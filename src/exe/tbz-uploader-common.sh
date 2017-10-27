@@ -1,8 +1,8 @@
 #!/bin/sh
 . tbz-common.sh
 
-if is_unset TBZ_UPLOADER_COMMON_H ; then #ifndef TBZ_UPLOADER_COMMON_H
-TBZ_UPLOADER_COMMON_H="true" #define TBZ_UPLOADER_COMMON_H
+if is_unset TBZ_UPLOADER_COMMON_H_ ; then #ifndef TBZ_UPLOADER_COMMON_H_
+TBZ_UPLOADER_COMMON_H_="true" #define TBZ_UPLOADER_COMMON_H_
 
 tbz_uploader_common(){
 	local returned_url="$(curl "$@")"
@@ -13,4 +13,4 @@ tbz_uploader_common(){
 	fi
 }
 
-fi #endif TBZ_UPLOADER_COMMON_H
+fi #endif TBZ_UPLOADER_COMMON_H_

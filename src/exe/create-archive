@@ -1,0 +1,23 @@
+#!/bin/sh
+. tbz-common.sh
+
+if [ $# -lt 1 ] ; then
+	error "$this_script file_or_directory"
+else
+	input="$1"
+fi
+
+if [ ! -d "$input" ] ; then
+	exec lz4 -9 -z "$@" "$input".lz4
+fi
+
+readfrom "$input" tr -d '/'
+namd="$___"
+
+if [ -z "$namd" ] ; then
+	error "Please do not create an archive of / with this command."
+fi
+
+exsorttar --lz4 "$namd".tar.lz4 "$input"
+
+stat -c%s "${namd}.tar.lz4" "$input" | hprint
