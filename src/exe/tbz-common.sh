@@ -98,10 +98,10 @@ _return_value(){
 	return "$status_"
 }
 
-__(){
-	_return_var="" "$@"
+__()(
+	_return_var="___" "$@"
 	printf '%s\n' "$___"
-}
+)
 
 value_of(){
 	# THE VALUUUUEEE
@@ -147,8 +147,7 @@ check(){
 
 checkvar(){
 	if is_set "$*"; then
-		value_of "$*"
-		if check "$___" ; then
+		if check "$(__ value_of "$*")" ; then
 			return 0
 		else
 			return 1
@@ -351,8 +350,7 @@ create_temp_file(){
 	else
 		temp_file="$(mktemp)"
 	fi
-	_return_var="" shecho "$temp_file"
-	tbz_common_temp_files_="${tbz_common_temp_files_} ${___}"
+	tbz_common_temp_files_="${tbz_common_temp_files_} $(__ shecho "$temp_file")"
 	_return_value "$temp_file"
 }
 

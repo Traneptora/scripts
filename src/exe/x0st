@@ -4,8 +4,7 @@ include tbz-uploader-common.sh
 
 if [ $# -lt 1 ] ; then
 	reading_from_stdin="true"
-	temp_suffix="log" create_temp_file
-	filename="$___"
+	_return_var=filename temp_suffix="log" create_temp_file
 	cat >"$filename"
 else
 	reading_from_stdin="false"

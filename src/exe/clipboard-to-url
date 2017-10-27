@@ -1,0 +1,19 @@
+#!/bin/sh
+. tbz-common.sh
+
+xclip_targets="$(xclip -selection clipboard -o -t TARGETS)"
+
+if fmatches "$xclip_targets" 'text/plain'; then
+	_return_var=txtfile temp_suffix=txt create_temp_file
+	xclip -selection clipboard -o -t text/plain >"$txtfile"
+	x0st "$txtfile"
+	pluma "$txtfile"
+fi
+
+if fmatches "$xclip_targets" 'image/png'; then
+	_return_var=pngfile temp_suffix=png create_temp_file
+	xclip -selection clipboard -o -t image/png >"$pngfile"
+	optipng -zc9 -zm8 -zs1 -f5 "$pngfile"
+	x0st "$pngfile"
+	eom "$pngfile"
+fi
