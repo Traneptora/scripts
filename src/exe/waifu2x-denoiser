@@ -99,7 +99,7 @@ cat >"$tempscript" <<EOF
 import vapoursynth as vs
 core = vs.core
 
-# waifu2x-w2xc requires RGBS
+# waifu2x requires RGBS
 # RGBS is Single Precision RGB float, i.e. rgb32f
 
 clip = core.ffms2.Source(source=image_in)
@@ -117,7 +117,7 @@ else:
 
 rgbclip = core.resize.Point(rgbclip, format=vs.RGBS, range_in_s='full', range_s='full')
 if (have_alpha):
-	aclip = core.resize.Point(aclip, format=vs.GRAYS, range_in_s='full', range_s='full')
+	aclip = core.resize.Point(aclip, format=vs.RGBS, range_in_s='full', range_s='full')
 EOF
 
 if checkvar CAFFE; then
@@ -128,7 +128,7 @@ rgbclip = core.caffe.Waifu2x(rgbclip, noise=(int(noise_level) - 1), scale=int(sc
 if (have_alpha):
 	aclip = core.caffe.Waifu2x(aclip, noise=(int(noise_level) - 1), scale=int(scale_ratio), model=(4 if (photo == 'True') else 3), processor=(0 if (int(gpu) < 0) else int(gpu)))
 else:
-	aclip = core.std.BlankClip(rgbclip, format=vs.GRAYS, color=[1.0])
+	aclip = core.std.BlankClip(rgbclip, format=vs.RGBS, color=[1.0, 1.0, 1.0])
 EOF
 # end waifu2x-caffe
 else
@@ -138,14 +138,14 @@ rgbclip = core.w2xc.Waifu2x(rgbclip, noise=int(noise_level), scale=int(scale_rat
 if (have_alpha):
 	aclip = core.w2xc.Waifu2x(aclip, noise=int(noise_level), scale=int(scale_ratio), photo=(photo == 'True'), processor=int(gpu))
 else:
-	aclip = core.std.BlankClip(rgbclip, format=vs.GRAYS, color=[1.0])
+	aclip = core.std.BlankClip(rgbclip, format=vs.RGBS, color=[1.0, 1.0, 1.0])
 EOF
 # end waifu2x-w2xc
 fi
 
 cat >>"$tempscript" <<EOF
 rgbclip = core.resize.Bilinear(rgbclip, format=vs.RGB24, range_in_s='full', range_s='full')
-aclip = core.resize.Bilinear(aclip, format=vs.GRAY8, range_in_s='full', range_s='full')
+aclip = core.resize.Bilinear(aclip, format=vs.GRAY8, matrix_s='709', range_in_s='full', range_s='full')
 clip = core.std.Splice([get_plane(rgbclip, 1), get_plane(rgbclip, 2), get_plane(rgbclip, 0), aclip])
 clip.set_output()
 EOF
@@ -157,13 +157,14 @@ runwaifu2x(){
 	width=$(identify -format '%w' "$tempin")
 	height=$(identify -format '%h' "$tempin")
 
-	newwidth=$(printf '%.0f' $(bc -l <<<"$width * $scale_ratio_temp"))
-	newheight=$(printf '%.0f' $(bc -l <<<"$height * $scale_ratio_temp"))
+	newwidth=$(printf '%.0f' "$(__ readfrom "$width * $scale_ratio_temp" bc -l)")
+	newheight=$(printf '%.0f' "$(__ readfrom "$height * $scale_ratio_temp" bc -l)")
 	new2xwidth=$(($width * $scale_ratio_2x))
 	new2xheight=$(($height * $scale_ratio_2x))
 
-	vspipe --arg image_in="$tempin" --arg noise_level="$noise_level" --arg scale_ratio="$scale_ratio_2x" --arg photo="$photo" --arg gpu="$gpu" "$tempscript" "$tempout"
-	ffmpeg -hide_banner -y -f rawvideo -video_size "${new2xwidth}x${new2xheight}" -pixel_format gbrap -i "$tempout" "$tempoutp"
+	#vspipe --arg image_in="$tempin" --arg noise_level="$noise_level" --arg scale_ratio="$scale_ratio_2x" --arg photo="$photo" --arg gpu="$gpu" "$tempscript" "$tempout"
+	waifu2x-converter-cpp -i "$tempin" -o "$tempoutp" --noise-level "$noise_level" --scale-ratio "$scale_ratio_2x"
+	#ffmpeg -hide_banner -y -f rawvideo -video_size "${new2xwidth}x${new2xheight}" -pixel_format gbrap -i "$tempout" "$tempoutp"
 	optipng -force -zc6 -zm8 -zs0 -f0 "$tempoutp"
 	if [ "$photo" = "True" ] ; then
 		convert "$tempoutp" -filter mitchell -resize "${newwidth}x${newheight}" "$tempin"
