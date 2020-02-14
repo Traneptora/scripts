@@ -7,7 +7,7 @@ if fmatches "$xclip_targets" 'text/plain'; then
 	_return_var=txtfile temp_suffix=txt create_temp_file
 	xclip -selection clipboard -o -t text/plain >"$txtfile"
 	x0st "$txtfile"
-	pluma "$txtfile"
+	edit "$txtfile"
 fi
 
 if fmatches "$xclip_targets" 'image/png'; then
