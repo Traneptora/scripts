@@ -3,21 +3,21 @@
 # The shebang here is to identify this as an SH script, not a BASH script
 # Actually executing this won't do anything interesting.
 
-shell_is_interactive=false
+shell_is_interactive_=false
 
 case "$-" in
 	*i*)
-		shell_is_interactive=true
+		shell_is_interactive_=true
 		;;
 	*) 
-		shell_is_interactive=false
+		shell_is_interactive_=false
 		;;
 esac
 
-if [ -z ${TBZ_COMMON_H_+x} ] ; then #ifndef TBZ_COMMON_H_
+if [ -z "${TBZ_COMMON_H_+x}" ] ; then #ifndef TBZ_COMMON_H_
 TBZ_COMMON_H_="true" #define TBZ_COMMON_H_
 
-if [ "$shell_is_interactive" != "true" ] && [ "$tbz_common_no_set_efu_" != "true" ] ; then
+if [ "$shell_is_interactive_" != "true" ] && [ "$tbz_common_no_set_efu_" != "true" ] ; then
 	set -e
 	set -f
 	set -u
@@ -26,53 +26,40 @@ if [ "$shell_is_interactive" != "true" ] && [ "$tbz_common_no_set_efu_" != "true
 	}
 fi
 
-print_oneline_warning_message() {
+print_oneline_cli_message_(){
+	local color="$1"; shift
+	local title="$1"; shift
+	local uncolor="$1"; shift
 	local message="$*"
 	if [ -t 2 ] ; then
-		printf '\e[33m\e[1mWarning: \e[21m%s\e[0m\n' "$message" >&2
+		printf "${color}%s: ${uncolor}%s\e[0m\n" "$title" "$message" >&2
 	else
-		printf 'Warning: %s\n' "$message" >&2
+		printf '%s: %s\n' "$title" "$message" >&2
 	fi
 }
 
-print_oneline_error_message(){
-	local message="$*"
-	if [ -t 2 ] ; then
-		printf '\e[31m\e[1mError: \e[21m%s\e[0m\n' "$message" >&2
-	else
-		printf 'Error: %s\n' "$message" >&2
-	fi
-}
-
-print_oneline_note_message() {
-	local message="$*"
-	if [ -t 2 ] ; then
-		printf '\e[36m\e[1mNote: \e[21m%s\e[0m\n' "$message" >&2	
-	else
-		printf 'Note: %s\n' "$message" >&2
-	fi
-}
-
-message_nonfatal() {
-	assert_is_set message_printer
+message_nonfatal_() {
+	local color="$1"; shift
+	local title="$1"; shift
+	local uncolor="$1"; shift
 	if [ -z "${1+x}" ] ; then
 		local message=""
 	else
 		local message="$1"; shift
 	fi
-	"${message_printer}" "$message"
+	print_oneline_cli_message_ "$color" "$title" "$uncolor" "$message"
 	local arg; for arg; do
-		printf '%s\n' "$arg"
+		printf "${color}%s${uncolor}\e[0m\n" "$arg"
 	done
 }
 
 error_nonfatal(){
-	message_printer="print_oneline_error_message" message_nonfatal "$@"
+	message_nonfatal_ '\e[31m\e[1m' 'Error' '\e[21m' "$@"
 }
 
 error(){
 	error_nonfatal "$@"
-	if checkvar shell_is_interactive ; then
+	if checkvar shell_is_interactive_ ; then
 		kill -s INT "$$"
 	else
 		exit 1
@@ -80,20 +67,20 @@ error(){
 }
 
 warning(){
-	message_printer="print_oneline_warning_message" message_nonfatal "$@"
+	message_nonfatal_ '\e[33m\e[1m' 'Warning' '\e[21m' "$@"
 }
 
 note(){
-	message_printer="print_oneline_note_message" message_nonfatal "$@"
+	message_nonfatal_ '\e[36m\e[1m' 'Note' '\e[21m' "$@"
 }
 
 set_var(){
-	eval "$1=\"$2\""
+	eval "$1=$(shell_escape "$2")"
 }
 
 _return_value(){
-	_return_var="${_return_var:-___}"
 	local status_="$?"
+	_return_var="${_return_var:-___}"
 	set_var "$_return_var" "$*"
 	return "$status_"
 }
@@ -138,7 +125,7 @@ assert_is_set(){
 }
 
 check(){
-	if [ "$*" = "true" ] ; then
+	if [ "$*" = "true" ] || [ "$*" = "yes" ]; then
 		return 0
 	else
 		return 1
@@ -158,11 +145,7 @@ checkvar(){
 }
 
 readfrom(){
-	if is_unset readfrom_read_string; then
-		local read_string="$1"; shift
-	else
-		local read_string="$readfrom_read_string"
-	fi
+	local read_string="$1"; shift
 	_return_value "$(printf '%s\n' "$read_string" | "$@")"
 }
 
@@ -269,13 +252,15 @@ command_exists(){
 # Includes a file that doesn't have to be in PATH
 # It could also be in the same directory as the file doing the including
 include(){
-	local included_file="$1"
+	local included_file="$1"; shift
 	if [ -e "$this_script_dirname"/"$included_file" ] ; then
-		. "$this_script_dirname"/"$included_file"
+		. "$this_script_dirname"/"$included_file" "$@"
 	elif [ -e "$this_script_abs_dirname"/"$included_file" ] ; then
-		. "$this_script_abs_dirname"/"$included_file"
+		. "$this_script_abs_dirname"/"$included_file" "$@"
 	elif [ -e ./"$included_file" ] ; then
-		. ./"$included_file"
+		. ./"$included_file" "$@"
+	elif command_exists "$included_file"; then
+		. "$included_file" "$@"
 	else
 		error "Cannot find: $included_file"
 	fi
@@ -290,6 +275,16 @@ iamgroot(){
 	iamroot
 }
 
+shell_escape() {
+	local arg; for arg; do
+		arg="$(printf %s "$arg" | sed "s/'/'\\\\''/g"; printf 'x\n')"
+		arg="${arg%?}"
+		printf "'%s' " "$arg" | sed "s/^''//" | sed "s/\([^\\\\]\)''/\1/g"
+	done
+	printf '\n'
+}
+
+
 shecho(){
 	local retvalue=""
 	local arg; for arg; do
@@ -299,7 +294,7 @@ shecho(){
 	readfrom "$retvalue" sed "s/^''//g; s/\([^\\\\]\)''/\\1/g"
 }
 
-add_to_export_env(){
+add_to_export_env0_(){
 
 	assert_is_set env_var separator_char
 	
@@ -311,10 +306,16 @@ add_to_export_env(){
 	local curr_value="$___"
 	
 	if checkvar prepend; then
-		eval "export ${env_var}=\"${new_value}${separator_char}${curr_value}\""
+		eval "export ${env_var}=\"\${new_value}\${separator_char}\${curr_value}\""
 	else
-		eval "export ${env_var}=\"${curr_value}${separator_char}${new_value}\""
+		eval "export ${env_var}=\"\${curr_value}\${separator_char}\${new_value}\""
 	fi
+}
+
+add_to_export_env() {
+	local arg; for arg; do
+		add_to_export_env0_ "$arg"
+	done
 }
 
 add_dir_to_export_env0_(){
@@ -380,7 +381,7 @@ tbz_common_temp_files_=""
 
 add_cleanup_routine "tbz_cleanup_temp_files_"
 
-if ! checkvar shell_is_interactive ; then
+if ! checkvar shell_is_interactive_ ; then
 	trap 'SIGNAL=INT  tbz_cleanup_' INT
 	trap 'SIGNAL=QUIT tbz_cleanup_' QUIT
 	trap 'SIGNAL=TERM tbz_cleanup_' TERM
@@ -390,7 +391,7 @@ fi
 
 trap 'SIGNAL=EXIT tbz_cleanup_' EXIT
 
-if ! check "$shell_is_interactive" ; then
+if ! checkvar shell_is_interactive_ ; then
 	this_script_fullname="$0"
 	this_script="$(basename "$this_script_fullname")"
 	this_script_dirname="$(dirname "$this_script_fullname")"
