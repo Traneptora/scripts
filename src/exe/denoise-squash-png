@@ -88,9 +88,9 @@ INWIDTH="$(identify -format '%w' "$INPUT")"
 
 if [ "$INHEIGHT" -gt 720 ] || [ "$INWIDTH" -gt 1280 ]; then
 	# It maintains aspect and fits it inside 1280x720
-	convert -filter Catrom -resize 1280x720 -depth 8 "$TEMPFILE1" "$INPUT"
+	convert "$TEMPFILE1" -rotate '90<' -filter Catrom -resize 1280x720 -depth 8 "$INPUT"
 else
-	convert "$TEMPFILE1" -depth 8 "$INPUT"
+	convert "$TEMPFILE1" -rotate '90<' -depth 8 "$INPUT"
 fi
 
 optipng $OQUIET -preserve -zc9 -zm8 -zs1 -f5 "$INPUT"
