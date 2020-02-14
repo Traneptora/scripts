@@ -4,7 +4,7 @@
 if is_set DISPLAY; then
 	if ! iamroot ; then
 		if command_exists sublime_text; then
-			my_editor="${my_editor-sublime_text}"
+			my_editor="${my_editor-subl}"
 		fi
 	fi
 	if command_exists pluma; then
