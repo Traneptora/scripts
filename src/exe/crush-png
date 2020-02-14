@@ -56,14 +56,14 @@ else
 	OQUIET=" "	
 fi
 
-TEMPPNG="$ORIGPNG".crushpng_tempout.$RANDOM.tpng
+TEMPPNG="$ORIGPNG".$RANDOM.crushpng_tempout.png
 while [ -e "$TEMPPNG" ] ; do
-	TEMPPNG="${TEMPPNG%.tpng}".$RANDOM.tpng
+	TEMPPNG="$ORIGPNG".$RANDOM.crushpng_tempout.png
 done
 
-BAKPNG="$ORIGPNG".crushpng_backup.$RANDOM.tpng
+BAKPNG="$ORIGPNG".$RANDOM.crushpng_backup.png
 while [ -e "$BAKPNG" ] ; do
-	BAKPNG="${BAKPNG%.tpng}".$RANDOM.tpng
+	BAKPNG="$ORIGPNG".$RANDOM.crushpng_backup.png
 done
 
 clup() {
@@ -83,13 +83,14 @@ clup() {
 	fi
 }
 
-trap clup EXIT
+add_cleanup_routine clup
 
 cp --preserve=all "$ORIGPNG" "$BAKPNG"
 
 optipng $OQUIET -fix -force -preserve -zc9 -zm8 -zs1 -f5 "$ORIGPNG"
+#truepng "$ORIGPNG" /force /zc9 /zm8 /zs1 /fe /a1 /i0 /md remove all >$STDOUT
 FINISHED_OPTIPNG=true
 
-zopflipng -y -m --filters=04me "$ORIGPNG" "$TEMPPNG" >$STDOUT
+zopflipng -y -m --filters=04mep "$ORIGPNG" "$TEMPPNG" >$STDOUT
 mv -f "$TEMPPNG" "$ORIGPNG"
 STILL_WORKING=false
