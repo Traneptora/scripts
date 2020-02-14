@@ -1,7 +1,13 @@
 #!/bin/sh
-set -e
+set -e; set -f; set -u
 
-for arg; do
-	printf "'%s' " "$(printf %s "$arg" | sed "s/'/'\\\\''/g")" | sed "s/^''//" | sed "s/\([^\\\\]\)''/\1/g"
-done
-printf '\n'
+shell_escape() {
+	local arg; for arg; do
+		arg="$(printf %s "$arg" | sed "s/'/'\\\\''/g"; printf 'x\n')"
+		arg="${arg%?}"
+		printf "'%s' " "$arg" | sed "s/^''//" | sed "s/\([^\\\\]\)''/\1/g"
+	done
+	printf '\n'
+}
+
+shell_escape "$@"
