@@ -17,7 +17,7 @@ esac
 if [ -z "${TBZ_COMMON_H_+x}" ] ; then #ifndef TBZ_COMMON_H_
 TBZ_COMMON_H_="true" #define TBZ_COMMON_H_
 
-if [ "$shell_is_interactive_" != "true" ] && [ "$tbz_common_no_set_efu_" != "true" ] ; then
+if [ "$shell_is_interactive_" != "true" ] && [ "${tbz_common_no_set_efu_-}" != "true" ] ; then
 	set -e
 	set -f
 	set -u
@@ -100,16 +100,18 @@ tolower() {
 }
 
 
+# deprecated
 is_unset(){
 	local arg; for arg; do
 		eval "local status=\"\${${arg}+x}\""
-		if [ -z "$status" ] ; then
+		if [ -z "${status-}" ] ; then
 			return 0
 		fi
 	done
 	return 1
 }
 
+# deprecated
 is_set() {
 	if is_unset "$@"; then
 		return 1
@@ -118,6 +120,7 @@ is_set() {
 	fi
 }
 
+# deprecated
 assert_is_set(){
 	if is_unset "$@"; then
 		error "$* is unset."
@@ -132,6 +135,7 @@ check(){
 	fi
 }
 
+# deprecated
 checkvar(){
 	if is_set "$*"; then
 		if check "$(__ value_of "$*")" ; then
@@ -150,33 +154,33 @@ readfrom(){
 }
 
 matches_grep(){
-
+	local grep_args="$1"; shift
 	if is_unset matches_grep_read_string; then
 		local read_string="$1"; shift
 	else
-		local read_string="$matches_grep_read_string"
+		local read_string="${matches_grep_read_string-}"
 	fi
 		
 	# This is all a hack to get around sh's lack of arrays
 	local num_args="$#"
 	local i=1; while [ "$i" -le "$num_args" ] ; do
 		eval "local arg_num_${i}=\"\${$i}\""
-	i=$((1+$i)); done
+	i=$((1+i)); done
 	set --
 	local i=1; while [ "$i" -le "$num_args" ] ; do
 		eval "local arg=\"\${arg_num_${i}}\""
 		set -- "$@" -e "${arg}"
-	i=$((1+$i)); done
+	i=$((1+i)); done
 	
-	printf '%s\n' "$read_string" | $grep_command $grep_args "$@"
+	printf '%s\n' "$read_string" | "${grep_command:-grep}" "$grep_args" "$@"
 }
 
 matches(){
-	grep_command="grep -Eq" grep_args="${grep_args-}" matches_grep "$@"
+	matches_grep -Eq "$@"
 }
 
 fmatches(){
-	grep_command="grep -Fqx" grep_args="${grep_args-}" matches_grep "$@"
+	matches_grep -Fqx "$@"
 }
 
 num_compare() {
@@ -224,23 +228,22 @@ is_le() {
 }
 
 parse_arguments(){
-	assert_is_set option_processor naked_argument_processor
 	local finished_parsing_args="false"
 	local arg; for arg; do
-		if ! checkvar finished_parsing_args && matches "$arg" '^--'; then
+		if ! check "${finished_parsing_args-}" && matches "$arg" '^--'; then
 			if [ "$arg" = "--" ] ; then
 				finished_parsing_args="true"
 			elif matches "$arg" "=" ; then
 				local name; local value
 				readfrom "$arg" sed 's/^--\([^=]*\)=\(.*\)$/\1/'; name="$___"
 				readfrom "$arg" sed 's/^--\([^=]*\)=\(.*\)$/\2/'; value="$___"
-				"$option_processor" "$name" "$value"
+				"${option_processor:?}" "$name" "$value"
 			else
 				readfrom "$arg" tail -c +3
-				"$option_processor" "$___" "$___"
+				"${option_processor:?}" "$___" "$___"
 			fi
 		else
-			"$naked_argument_processor" "$arg"
+			"${naked_argument_processor:?}" "$arg"
 		fi
 	done
 }
@@ -251,16 +254,17 @@ command_exists(){
 
 # Includes a file that doesn't have to be in PATH
 # It could also be in the same directory as the file doing the including
+# deprecated
 include(){
 	local included_file="$1"; shift
 	if [ -e "$this_script_dirname"/"$included_file" ] ; then
-		. "$this_script_dirname"/"$included_file" "$@"
+		. "$this_script_dirname"/"$included_file"
 	elif [ -e "$this_script_abs_dirname"/"$included_file" ] ; then
-		. "$this_script_abs_dirname"/"$included_file" "$@"
+		. "$this_script_abs_dirname"/"$included_file"
 	elif [ -e ./"$included_file" ] ; then
-		. ./"$included_file" "$@"
+		. ./"$included_file"
 	elif command_exists "$included_file"; then
-		. "$included_file" "$@"
+		. "$included_file"
 	else
 		error "Cannot find: $included_file"
 	fi
@@ -294,27 +298,31 @@ shecho(){
 	readfrom "$retvalue" sed "s/^''//g; s/\([^\\\\]\)''/\\1/g"
 }
 
-add_to_export_env0_(){
+_add_to_export_env0(){
 
-	assert_is_set env_var separator_char
-	
-	local new_value="$1"
+	local add_value="$1"
 
-	value_of "$env_var"
-	___=${___%%${separator_char}}
-	___=${___##${separator_char}}
-	local curr_value="$___"
-	
-	if checkvar prepend; then
-		eval "export ${env_var}=\"\${new_value}\${separator_char}\${curr_value}\""
-	else
-		eval "export ${env_var}=\"\${curr_value}\${separator_char}\${new_value}\""
+	eval "local curr_value=\"\${${env_var:?}-}\""
+	curr_value=${curr_value%%${separator_char}}
+	curr_value=${curr_value##${separator_char}}
+
+	local my_sep=""
+	if [ -n "${curr_value-}" ] ; then
+		my_sep="${separator_char:?}"
 	fi
+
+
+	if check "${prepend-}"; then
+		local new_value="${add_value}${my_sep}${curr_value}"
+	else
+		local new_value="${curr_value}${my_sep}${add_value}"
+	fi
+	eval "export ${env_var}=\"\${new_value}\""
 }
 
 add_to_export_env() {
 	local arg; for arg; do
-		add_to_export_env0_ "$arg"
+		_add_to_export_env0 "$arg"
 	done
 }
 
@@ -346,8 +354,9 @@ tbz_cleanup_temp_files_(){
 
 create_temp_file(){
 	local temp_file
-	if is_set temp_suffix; then
-		temp_file="$(mktemp --suffix=".${temp_suffix}")"
+	temp_suffix=${temp_suffix:-"$1"}
+	if [ -n "${temp_suffix:+x}" ]; then
+		temp_file="$(mktemp --suffix=".${temp_suffix-}")"
 	else
 		temp_file="$(mktemp)"
 	fi
@@ -381,7 +390,7 @@ tbz_common_temp_files_=""
 
 add_cleanup_routine "tbz_cleanup_temp_files_"
 
-if ! checkvar shell_is_interactive_ ; then
+if ! check "$shell_is_interactive_" ; then
 	trap 'SIGNAL=INT  tbz_cleanup_' INT
 	trap 'SIGNAL=QUIT tbz_cleanup_' QUIT
 	trap 'SIGNAL=TERM tbz_cleanup_' TERM
@@ -391,12 +400,17 @@ fi
 
 trap 'SIGNAL=EXIT tbz_cleanup_' EXIT
 
-if ! checkvar shell_is_interactive_ ; then
+if ! check "$shell_is_interactive_" ; then
 	this_script_fullname="$0"
 	this_script="$(basename "$this_script_fullname")"
 	this_script_dirname="$(dirname "$this_script_fullname")"
 	this_script_abs="$(readlink -f "$this_script_fullname")"
 	this_script_abs_dirname="$(dirname "$this_script_abs")"
+	export this_script_fullname
+	export this_script
+	export this_script_dirname
+	export this_script_abs
+	export this_script_abs_dirname
 fi
 
 fi #endif TBZ_COMMON_H_
