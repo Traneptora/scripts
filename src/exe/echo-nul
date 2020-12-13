@@ -1,7 +1,0 @@
-#!/bin/sh
-set -e
-
-for arg; do
-	printf '%s\0' "$arg"
-done
-

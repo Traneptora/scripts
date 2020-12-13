@@ -1,6 +1,0 @@
-#!/bin/sh
-. tbz-common.sh
-include tbz-uploader-common.sh
-
-set -- -sS -F 'sprunge=<-' "--url" "http://sprunge.us" "$@"
-tbz_uploader_common "$@"

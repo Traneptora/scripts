@@ -1,6 +1,0 @@
-#!/bin/sh
-# ideally you add this to the sudoers file
-#sudo chmod -R 777 /var/run/lightdm
-
-exec x11vnc -usepw -forever -many -noxdamage -display :0 -shared -o "$HOME"/.local/share/log/x11vnc.log
-
