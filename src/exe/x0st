@@ -11,9 +11,8 @@ else
 	filename="$1"; shift
 fi
 
-set -- "-Ffile=@${filename}" "--url" "https://0x0.st" "$@"
-tbz_uploader_common "$@"
+tbz_uploader_common "-Ffile=@${filename}" "--url" "https://0x0.st" "$@"
 
-if checkvar reading_from_stdin ; then
+if check "${reading_from_stdin-}" ; then
 	rm -f "$filename"
 fi
