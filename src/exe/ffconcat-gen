@@ -1,0 +1,13 @@
+#!/bin/sh
+. tbz-common.sh
+
+if [ -z "${1+x}" ] ; then
+	>&2 printf 'Usage: %s files...\n' "${this_script}"
+	exit 1
+fi
+
+printf '%s\n' "ffconcat version 1.0"
+
+for arg; do
+	printf 'file %s\n' "$(shell_escape "$arg")"
+done
