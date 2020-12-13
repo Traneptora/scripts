@@ -30,10 +30,10 @@ read -r index
 if [ -z "$index" ] ; then
 	index=0
 fi
-echo -n "Enter max password length [50]: "
+echo -n "Enter max password length [32]: "
 read -r maxlength
 if [ -z "$maxlength" ] ; then
-	maxlength=50
+	maxlength=32
 elif [ ! "$maxlength" -ge 8 -o ! "$maxlength" -le 50 ] ; then
 	echo "Invalid maxlength: $maxlength" >&2
 	exit 1
