@@ -1,4 +1,5 @@
 #!/bin/sh
 
-while true; do printf "$(date +%S.%N)"; printf '\r'; sleep .0001; done
-
+while printf '%s\r' "$(date +%S.%N)"; do
+    sleep .0001
+done
