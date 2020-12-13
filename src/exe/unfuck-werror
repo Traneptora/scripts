@@ -1,0 +1,3 @@
+#!/bin/sh
+my_gcc="$(dirname "$0")"/gcc
+rm -f -- "$my_gcc"
