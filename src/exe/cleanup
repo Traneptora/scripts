@@ -1,7 +1,7 @@
 #!/bin/sh
 
-if [ "$1" = "-r" -o "$1" = "--recursive" ] ; then
-	find -name '*~' -or -name '~$*' -exec rm -f {} \;
+if [ "${1-}" = "-r" -o "${1-}" = "--recursive" ] ; then
+	find -type f -name '*~' -or -name '~$*' -exec rm -f -- '{}' '+'
 else
-	rm -f *~ \~\$*
+	rm -f -- *~ \~\$*
 fi
