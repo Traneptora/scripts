@@ -1,0 +1,138 @@
+#!/bin/sh
+
+# pacgit
+
+# Copyright 2020 Leo Izen (thebombzen)
+#
+# Permission is hereby granted, free of charge, to any person 
+# obtaining a copy of this software and associated documentation 
+# files (the "Software"), to deal in the Software without 
+# restriction, including without limitation the rights to use, 
+# copy, modify, merge, publish, distribute, sublicense, and/or 
+# sell copies of the Software, and to permit persons to whom the 
+# Software is furnished to do so, subject to the following 
+# conditions:
+#
+# The above copyright notice and this permission notice shall be 
+# included in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES 
+# OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND 
+# NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT 
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, 
+# WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR 
+# OTHER DEALINGS IN THE SOFTWARE.
+
+# === Start Necessary Boilerplate ===
+_shell_escape() {
+	# local is not strictly POSIX-compliant
+	# but it is supported by many shells including DASH
+    local arg; for arg; do
+        arg="$(printf %s "$arg" | sed "s/'/'\\\\''/g"; printf 'x')"
+        arg="${arg%?}"
+        printf "'%s' " "$arg" | sed "s/^''//" | sed "s/\([^\\\\]\)''/\1/g"
+    done
+    printf '\n'
+}
+
+normal="$(tput sgr0)"
+#bold="$(tput bold)"
+red="$(tput setaf 1)"
+green="$(tput setaf 2)"
+yellow="$(tput setaf 3)"
+blue="$(tput setaf 4)"
+# ==== End Necessary Boilerplate ====
+
+pkgbuild_file="$(dirname "$(mktemp --dry-run)")/_pacgit_pkgbuild"
+update_pkgs="false"
+
+if [ "${1-x}" = "--update" ] && [ "$#" = "1" ]; then
+    if [ "$(id -u)" = "0" ] ; then
+        printf 'Must not be root.\n'
+        exit 1
+    fi
+    sudo true || exit 1
+    update_pkgs="true"
+elif [ "$#" -gt 0 ] ; then
+    printf 'Usage: %s [--update]\n' "$(basename "$0")"
+    exit 2
+fi
+
+_checkpkg() {
+    want_pacaur_update=2
+    package_name="$1"
+    package_version_local="$(pacman -Q "$package_name" | sed -r 's/^.*?-git\s+//')"
+    package_version_upstream_hash=""
+    pkgbuild_url="https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=${package_name}"
+    package_url=""
+    if ! curl -s -f -o "$pkgbuild_file" --url "$pkgbuild_url" ; then
+       _print_version
+       return $want_pacaur_update
+    fi
+    package_url="$(/bin/bash -c 'source '"$(_shell_escape "${pkgbuild_file}")"' && printf %s "$source"' | sed -r 's/^.*?git\+([^ ]+(\.git)?).*$/\1/')"
+    rm -f -- "$pkgbuild_file"
+    if ! ( printf '%s' "$package_url" | grep -Eq -e '^[a-z]+://' ) ; then
+    	_print_version
+        return $want_pacaur_update
+    fi
+    if [ "${package_url%\#branch=*}" != "${package_url}" ] ; then
+    	git_branch="refs/heads/${package_url##*\#branch=}"
+    elif [ "${package_url%\#commit=*}" != "${package_url}" ] ; then
+    	package_version_upstream_hash="${package_url##*\#commit=}"
+    else
+        git_branch="HEAD"
+    fi
+    if [ -z "$package_version_upstream_hash" ] ; then
+	    if ! ls_remote_out="$(git ls-remote "${package_url%%\#*}" "$git_branch")"; then
+	        _print_version
+	        return $want_pacaur_update
+	    fi
+	    package_version_upstream_hash="$(printf '%s\n' "$ls_remote_out" | head -n1 | sed -r 's:\s+.*$::')"
+    fi
+    hash_chunk="$(printf '%s\n' "$package_version_local" | sed -r 's/^([^\.:]*[\.:]+)*//' | sed -r 's/-[0-9a-zA-Z]+$//')"
+    if printf '%s\n' "$package_version_upstream_hash" | grep -Eq -e "^${hash_chunk}" -e "^${hash_chunk#?}"; then
+        want_pacaur_update=1
+    else
+        want_pacaur_update=0
+    fi
+    _print_version
+    return $want_pacaur_update
+}
+
+_print_version() {
+	case "$want_pacaur_update" in
+		0)
+			status_color="${red}"
+			;;
+		1)
+			status_color="${green}"
+			;;
+		*)
+			status_color="${yellow}"
+			;;
+	esac
+	printf '%s\n\tURL: %s\n\tCurrent version: %s\n\tRemote  version: %s\n\n' "${status_color}${package_name}${normal}" "${blue}${package_url}${normal}" "${package_version_local}" "${package_version_upstream_hash}"
+}
+
+updatelist=""
+updatelistnl=""
+pkglist="$(pacman -Qmq | grep -E -e '-git$' | tr '\n' ' ')"
+for pkg in $pkglist; do
+    if _checkpkg "$pkg"; then
+        updatelist="$(printf '%s %s' "$updatelist" "$pkg")"
+        updatelistnl="$(printf '%s\n%s' "$pkg" "$updatelistnl")"
+    fi
+done
+
+printf '%s\n' "${updatelist#?}"
+if [ "$update_pkgs" = "true" ] ; then
+    if [ -z "$updatelist" ] ; then
+        pacaur -Syu --noconfirm
+    else
+        printf '%s\n' "$updatelistnl" | pacaur -Syu --noconfirm -
+    fi
+fi
+
+rm -f -- "$pkgbuild_file"
