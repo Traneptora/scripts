@@ -3,7 +3,7 @@
 
 if is_set DISPLAY; then
 	if ! iamroot ; then
-		if command_exists sublime_text; then
+		if command_exists subl; then
 			my_editor="${my_editor-subl}"
 		fi
 	fi
@@ -51,4 +51,4 @@ i=1; while [ "$i" -le "$num_args" ]; do
 	fi
 i=$((1+$i)); done
 
-"$my_editor" "$@"
+exec "$my_editor" "$@"

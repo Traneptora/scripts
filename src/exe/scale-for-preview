@@ -1,7 +1,14 @@
 #!/bin/sh
+. tbz-common.sh
 
-fname="$1"
-tmpname=/tmp/"${fname##*/}"
-convert "$fname" -resize 1088x816 -filter mitchell "${tmpname%.*}".png
-cjpeg -q 97 <"${tmpname%.*}".png >"${tmpname%.*}".jpg
-rm -f "${tmpname%.*}".png
+if [ "$#" -lt 1 ] ; then
+	error "Provide a filename." "Usage: $this_exe image"
+fi
+
+input_file="$1"
+tpng="$(mktemp --suffix=.png)"
+tjpeg="/tmp/$(basename "$input_file")"
+tjpeg="${tjpeg%.*}.jpg"
+convert "$input_file" -auto-orient -filter mitchell -resize 1088x816 "$tpng"
+cjpeg -q 97 <"$tpng" >"$tjpeg"
+rm -f -- "$tpng"
