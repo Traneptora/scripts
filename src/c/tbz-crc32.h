@@ -1,5 +1,5 @@
 /*******************************************************************************
-	tbz-crc32.h by thebombzen
+    tbz-crc32.h by thebombzen
 *******************************************************************************/
 
 #include <stdio.h>
@@ -21,7 +21,7 @@
         #define TBZ_EXPORT
     #endif
 #else
-	#define TBZ_EXPORT
+    #define TBZ_EXPORT
 #endif
 
 TBZ_EXPORT int tbz_compute_stream_crc32(FILE *input_f, uint32_t *returned_crc, char **error);
