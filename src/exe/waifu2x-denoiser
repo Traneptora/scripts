@@ -50,6 +50,8 @@ if [ "$noise_level" = 0 ] && [ "$scale_ratio" = 1 ] ; then
 	warning "Not denoising or scaling. Nothing much will happen."
 fi
 
+noise_level=$((-1 + "$noise_level"))
+
 if [ -z "$W2X" ] ; then
 	CAFFE=false
 elif [ "$W2X" = "caffe" ] ; then
@@ -163,7 +165,7 @@ runwaifu2x(){
 	new2xheight=$(($height * $scale_ratio_2x))
 
 	#vspipe --arg image_in="$tempin" --arg noise_level="$noise_level" --arg scale_ratio="$scale_ratio_2x" --arg photo="$photo" --arg gpu="$gpu" "$tempscript" "$tempout"
-	waifu2x-converter-cpp -i "$tempin" -o "$tempoutp" --noise-level "$noise_level" --scale-ratio "$scale_ratio_2x"
+	waifu2x-ncnn-vulkan -i "$tempin" -o "$tempoutp" -n "$noise_level" -s "$scale_ratio_2x"
 	#ffmpeg -hide_banner -y -f rawvideo -video_size "${new2xwidth}x${new2xheight}" -pixel_format gbrap -i "$tempout" "$tempoutp"
 	optipng -force -zc6 -zm8 -zs0 -f0 "$tempoutp"
 	if [ "$photo" = "True" ] ; then

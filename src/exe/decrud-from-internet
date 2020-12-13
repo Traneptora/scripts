@@ -21,7 +21,7 @@ convert -filter Lanczos2Sharp -depth 16 "$TEMPDL" "$TEMPFIN"
 rm -f "$TEMPDL"
 
 # Here's where we actually decrud it
-waifu2x-denoiser --w2x=w2xc --noise-level=3 "$TEMPFIN" "$TEMP_A" "$@"
+waifu2x-denoiser --noise-level=3 "$TEMPFIN" "$TEMP_A" "$@"
 
 # We add a small bit of selective blur for compression ratio
 # and we turn it back to an 8-bit png
