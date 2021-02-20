@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/parallel --shebang-wrap /usr/bin/env bash
 . tbz-common.sh
 
 FINISHED_OPTIPNG=false
