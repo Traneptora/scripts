@@ -1,0 +1,29 @@
+#!/bin/sh
+
+# don't use dumb paths here
+explorers="/mnt/c/Windows/explorer.exe /usr/bin/caja"
+expl_command=""
+
+for exp in $explorers; do
+    if command -v "$exp" >/dev/null 2>/dev/null; then
+        expl_command="$exp"
+        break
+    fi
+done
+
+if [ -z "$expl_command" ] ; then
+    printf '%s\n' "Error finding explorer."
+    exit 1
+fi
+
+if [ "$#" -lt 1 ] ; then
+    set -- '.'
+fi
+
+working_dir="$(pwd)"
+
+for arg; do
+    cd "$arg"
+    "$expl_command" .
+    cd "$working_dir"
+done
