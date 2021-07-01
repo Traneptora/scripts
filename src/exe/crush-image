@@ -1,0 +1,189 @@
+#!/bin/bash
+found_mm=false
+input_files=()
+bname="${0##*/}"
+check_expand="true"
+
+usage(){
+	exec >&2
+	printf 'Usage: %s [options...] input.png...\n\n' "$bname"
+	printf 'Options:\n'
+	printf '    -h, -?,\n'
+	printf '      --help      Print this help message\n'
+	printf '    --no-expand   Do not check images for extra frames, treat file as one image\n'
+	printf '    --expand      Check images for extra frames, and crush as an animation (default)\n'
+	printf '    --            Interpret all arguments after\n'
+	printf '                    this one as an input filename\n'
+	exit "${1-1}"
+}
+
+for arg; do
+	if [ "$found_mm" = "true" ] ; then
+		input_files+=("$arg")
+	elif [ "$arg" = "--" ] ; then
+		found_mm="true"
+	elif [ "$arg" = "--help" ] || [ "$arg" = "-h" ] || [ "$arg" = "-?" ]; then
+		usage 0
+	elif [ "$arg" = "--expand" ] ; then
+		check_expand="true"
+	elif [ "$arg" = "--no-expand" ] ; then
+		check_expand="false"
+	else
+		input_files+=("$arg")
+	fi
+done
+
+if [ "${#input_files[@]}" -lt 1 ] ; then
+	usage
+fi
+
+temp_images=()
+backup_images=()
+current_images=()
+temp_dirs=()
+success="true"
+
+_check_validity(){
+	fname="$1"
+	# the redirect is intentionally in the wrong order here,
+	# if I had wanted to send both streams to /dev/null
+	# I want to send stderror to stdout and capture it
+	# but discard actual stdout output to /dev/null
+	emsg="$(head -c1 2>&1 >/dev/null "$fname")"
+	if [ -z "$emsg" ] ; then
+		printf 'true'
+	else
+		printf >&2 '%s%s\n' "$bname" "${emsg#head}"
+		printf 'false'
+	fi
+}
+
+_cleanup() {
+	while (( "${#current_images}" )) ; do
+		current_image="${current_images[0]}"
+		backup_image="${backup_images[0]}"
+		if [ -n "${current_image}" ] ; then
+			printf >&2 'Caught signal, restoring from backup\n'
+			if [ -f "${backup_image}" ] ; then
+				cp --preserve=all -- "$backup_image" "$current_image"
+				rm -f -- "$backup_image"
+			else
+				printf >&2 'Unable to find backup image: %s\n' "$backup_image"
+			fi
+		fi
+		rm -f -- "$backup_image"
+		current_images=("${current_images[@]:1}")
+		backup_images=("${backup_images[@]:1}")
+	done
+	rm -rf -- "${temp_dirs[@]}" "${temp_images[@]}"
+	case "$signal" in
+		EXIT)
+			;;
+		*)
+			trap - "${signal}" EXIT
+			kill -s "${signal}" "$$"
+			;;
+	esac
+}
+
+for signal in EXIT INT TERM HUP; do
+	trap "signal=${signal} _cleanup" "${signal}"
+done
+
+_divide_percent(){
+	awk -v num="$1" -v denom="$2" 'BEGIN { printf("%.2f\n", 100.0 * num/denom) }'
+}
+
+_crush_png() {
+	if [ "$3" = "true" ] ; then
+		_crush_apng "$@"
+		return "$?"
+	fi
+	printf >&2 'Stripping metadata and performing optipng optimizations\n'
+	optipng -fix -force -preserve -zc9 -zm8 -zs1 -f5 "$1"
+	printf >&2 'Crushing with zopflipng\n'
+	zopflipng -y -m --filters=04mep "$1" "$2"
+}
+
+# This is to catch errors
+_apngasm() {
+	#printf '%s\n' "$*"
+	apngasm "$@"
+}
+
+_crush_apng() {
+	printf >&2 'Exploding possible animated png\n'
+	local input_file="$1"
+	local temp_file="$2"
+	local temp_dir="${temp_file}.d"
+	temp_dirs+=("$temp_dir")
+	_apngasm --force --output "$temp_dir" --json directive.json --disassemble "$input_file"
+	local new_png; for new_png in "$temp_dir"/*.png; do
+		_crush_image "$new_png" "false"
+	done
+	_apngasm --force --output "$temp_file" --file "${temp_dir}/directive.json"
+	rm -rf -- "$temp_dir"
+	unset "temp_dirs[${#temp_dirs}-1]"
+}
+
+_crush_jpg() {
+	printf >&2 'Stripping JPEG exifdata (except timestamp) with jhead\n'
+	jhead -purejpg -mkexif -dsft -autorot "$1"
+	printf >&2 'Optimizing JPEG with jpegtran\n'
+	jpegtran -optimize -progressive <"$1" >"$2"
+}
+
+_crush_image() {
+	local input_file="$1"
+	local expand="$2"
+	if [ "$(_check_validity "$input_file")" = "false" ] ; then
+		return 2
+	fi
+	local mime_type="$(file --brief --no-pad --mime-type "$input_file")"
+	case "$mime_type" in
+		image/png)
+			printf >&2 'Found PNG image: %s\n' "$input_file"
+			crush_func=_crush_png
+			;;
+		image/jpeg)
+			printf >&2 'Found JPEG image: %s\n' "$input_file"
+			crush_func=_crush_jpg
+			;;
+		*)
+			printf >&2 '%s: Unrecognized file type: %s\n' "$bname" "$mime_type"
+			return 2
+			;;
+	esac
+	local current_image="$input_file"
+	current_images+=("$current_image")
+	local backup_image="${input_file}.crush-image.bak"
+	backup_images+=("$backup_image")
+	local temp_image="${current_image}.crush-image-tmp.png"
+	temp_images+=("$temp_image")
+	cp -f --preserve=all -- "$current_image" "$backup_image"
+
+	local old_size="$(stat -c%s "$current_image")"
+	"$crush_func" "$current_image" "$temp_image" "$expand"
+	local new_size="$(stat -c%s "$temp_image")"
+	printf >&2 '\nOld size: %d, new size: %d\nNew file %s bytes lower and %s%% size\n\n' "$old_size" "$new_size" "$((old_size - new_size))" "$(_divide_percent "$new_size" "$old_size")"
+
+	mv -f -- "$temp_image" "$current_image"
+	cp -f --attributes-only --preserve=all -- "$backup_image" "$current_image"
+	rm -f -- "$temp_image" "$backup_image"
+	
+	unset "current_images[${#current_images[@]}-1]"
+	unset "temp_images[${#temp_images[@]}-1]"
+	unset "backup_images[${#backup_images[@]}-1]"
+}
+
+for input_file in "${input_files[@]}"; do
+	if ! _crush_image "$input_file" "$check_expand"; then
+		success="false"
+	fi
+done
+
+if [ "$success" = "true" ] ; then
+	exit 0
+else
+	exit 2
+fi
