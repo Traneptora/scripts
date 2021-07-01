@@ -1,10 +1,10 @@
-#!/bin/sh
+#!/bin/bash
 
 # don't use dumb paths here
-explorers="/mnt/c/Windows/explorer.exe /usr/bin/caja"
+explorers=("/mnt/c/Windows/explorer.exe" "/usr/bin/caja")
 expl_command=""
 
-for exp in $explorers; do
+for exp in "${explorers[@]}"; do
     if command -v "$exp" >/dev/null 2>/dev/null; then
         expl_command="$exp"
         break
