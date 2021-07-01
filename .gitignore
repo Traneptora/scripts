@@ -1,0 +1,5 @@
+# C garbage
+.o
+
+# python garbage
+__pycache__
