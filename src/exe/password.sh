@@ -1,54 +1,61 @@
 #!/bin/sh
-. tbz-common.sh
 
-shecho "$(command -v sha3sum)"
 
-SHA3_256SUM="$(command -v sha3-256sum || printf '%s -a 256' "$___")"
-
-if is_unset STORED_MHASH ; then
-	STORED_MHASH=/tmp/stored_mhash
+if command -v sha3-256sum >/dev/null 2>/dev/null; then
+    SHA3_256SUM="sha3-256sum"
+elif command -v sha3sum >/dev/null 2>/dev/null; then
+    SHA3_256SUM="sha3sum -a 256"
+else
+    printf '%s\n' "Cannot find sha3-256sum or sha3sum"
+    exit 1
 fi
 
+
+STORED_MHASH="${STORED_MHASH:-/tmp/stored_mhash}"
+
 if [ -e "$STORED_MHASH" ] ; then
-	MHASH_AGE="$(perl -e 'print -M $ARGV[0]' "$STORED_MHASH")"
-	if is_gt "$MHASH_AGE" 0.25 ; then
-		rm -f "$STORED_MHASH"
+	MHASH_AGE="$(perl -e 'print -M $ARGV[0];' "$STORED_MHASH")"
+	if  [ -n "$(awk -v n1="$MHASH_AGE" -v n2="0.25" 'BEGIN { print(n1 > n2 ? "x" : "" ) }')" ] ; then
+		rm -f -- "$STORED_MHASH"
 	else
-		MHASH="$(xz -d --format=raw --lzma1=dict=8MiB,lc=3,lp=0,pb=2,mode=normal,nice=64,mf=bt4,depth=0 <"$STORED_MHASH")"
+		MHASH="$(xz -d --format=raw --lzma1=dict=8MiB,lc=1,lp=1,pb=1,mode=normal,nice=64,mf=bt4,depth=0 <"$STORED_MHASH")"
 	fi
 fi
 
-echo -n "Enter domain: "
+printf '%s' "Enter domain: "
 read -r domain
-echo -n "Enter username [leo.izen@gmail.com]: "
+default_username="leo.izen@gmail.com"
+printf 'Enter username [%s]: ' "$default_username"
 read -r username
 if [ -z "$username" ] ; then
-	username="leo.izen@gmail.com"
+	username="$default_username"
 fi
-echo -n "Enter index [0]: "
+default_index="0"
+printf 'Enter index [%s]: ' "$default_index"
 read -r index
 if [ -z "$index" ] ; then
-	index=0
+	index="$default_index"
 fi
-echo -n "Enter max password length [32]: "
+default_maxlength="32"
+printf 'Enter max password length [%s]: ' "$default_maxlength"
 read -r maxlength
 if [ -z "$maxlength" ] ; then
-	maxlength=32
+	maxlength="$default_maxlength"
 elif [ ! "$maxlength" -ge 8 -o ! "$maxlength" -le 50 ] ; then
-	echo "Invalid maxlength: $maxlength" >&2
-	exit 1
+	printf 'Invalid maxlength: %s\n' "$maxlength" >&2
+	exit 2
 fi
 
-if is_unset MHASH  ; then
-	echo -n "Enter master password: "
+if [ -z "${MHASH+x}" ] ; then
+	printf "Enter master password: "
 	# The cat pipe here causes the commands to be greedy
 	# They won't exit until cat has sent EOF
 	MHASH="$(cat | sh -c "$SHA3_256SUM" | cut -f1 -d' ' | perl -lne 'print pack "H*", $_' | base64)"
-	printf "%s" "$MHASH" | xz -z --format=raw --lzma1=dict=8MiB,lc=3,lp=0,pb=2,mode=normal,nice=64,mf=bt4,depth=0 >"$STORED_MHASH"
+	printf "%s" "$MHASH" | xz -z --format=raw --lzma1=dict=8MiB,lc=1,lp=1,pb=1,mode=normal,nice=64,mf=bt4,depth=0 >"$STORED_MHASH"
 fi
 
 
 PHASH="$(printf '%s%s%s%s%s' "$domain" "$username" "$index" "$MHASH" "$maxlength" | sh -c "$SHA3_256SUM" | cut -f1 -d' ' | perl -lne 'print pack "H*", $_' | base64)"
 
 printf '%s%s' "Df!1@2" "$PHASH" | head -c "$maxlength"
-echo
+printf '\n'
