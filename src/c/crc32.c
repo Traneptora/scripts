@@ -20,6 +20,14 @@ void usage(char *progname) {
     fprintf(stderr, "    %s [--help] file1 [fileN...]\n\n", progname);
 }
 
+void print_crc32(uint32_t crc, char *fname){
+    if (fname){
+        printf("%08X %s\n", crc, fname);
+    } else {
+        printf("%08X\n", crc);
+    }
+}
+
 int main(int argc, char *argv[]) {
 
     uint32_t crc;
@@ -35,7 +43,7 @@ int main(int argc, char *argv[]) {
     if (argc == 2){
         success = tbz_compute_file_crc32(argv[1], &crc, &error);
         if (success == 0){
-            printf("%08X\n", crc);
+            print_crc32(crc, NULL);
         } else {
             fprintf(stderr, "%s: %s: %s\n", "crc32", argv[1], error);
             ret = 2;
@@ -44,7 +52,7 @@ int main(int argc, char *argv[]) {
         for (int i = 1; i < argc; i++){
             success = tbz_compute_file_crc32(argv[i], &crc, &error);
             if (success == 0){
-                printf("%s 0x%08X\n", argv[i], crc);
+                print_crc32(crc, argv[i]);
             } else {
                 fprintf(stderr, "%s: %s: %s\n", "crc32", argv[i], error);
                 ret = 2;
