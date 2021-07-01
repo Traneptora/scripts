@@ -1,13 +1,25 @@
 #!/bin/sh
-. tbz-common.sh
 
 if [ -z "${1+x}" ] ; then
-	>&2 printf 'Usage: %s files...\n' "${this_script}"
+	>&2 printf 'Usage: %s files...\n' "${0##*/}"
 	exit 1
 fi
+
+shell_escape() {
+	for arg; do
+		arg="$(printf %s "$arg" | sed "s/'/'\\\\''/g"; printf 'x')"
+		arg="${arg%?}"
+		printf "'%s' " "$arg" | sed "s/^''//" | sed "s/\([^\\\\]\)''/\1/g"
+	done
+	printf '\n'
+}
 
 printf '%s\n' "ffconcat version 1.0"
 
 for arg; do
-	printf 'file %s\n' "$(shell_escape "$arg")"
+	ffprobeinfo="$(ffprobe 2>/dev/null -i "$arg" -of flat -show_format -show_streams; printf x)"
+    ffprobeinfo="${ffprobeinfo%?}"
+    duration="$(printf '%s' "$ffprobeinfo" | grep -Ei -e '^(format|streams\.stream\.[0-9]+)\.duration="[0-9]*\.[0-9]*"$' | sed -r 's/^(format|streams\.stream\.[0-9]+)\.duration="([0-9]*\.[0-9]*)"$/\2/i' | head -n1)"
+    printf 'file %s\n' "$(shell_escape "$arg")"
+    printf 'duration %s\n' "$duration"
 done
