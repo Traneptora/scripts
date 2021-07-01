@@ -1,7 +1,0 @@
-#!/bin/sh
-my_gcc="$(dirname "$0")"/gcc
-rm -f -- "$my_gcc"
-correct_gcc="$(command -v gcc)"
-printf '%s\n' '#!/bin/sh' >"$my_gcc"
-printf 'exec %s -w "$@"\n' "$correct_gcc" >>"$my_gcc"
-chmod 755 -- "$my_gcc"

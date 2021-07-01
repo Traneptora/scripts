@@ -1,5 +1,0 @@
-#!/bin/sh
-set -e
-
-screencap-quiet
-exec gimp /tmp/screenshot.png
