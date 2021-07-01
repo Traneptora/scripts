@@ -59,7 +59,7 @@ _check_validity(){
 }
 
 _cleanup() {
-	while (( "${#current_images}" )) ; do
+	while (( "${#current_images[@]}" )) ; do
 		current_image="${current_images[0]}"
 		backup_image="${backup_images[0]}"
 		if [ -n "${current_image}" ] ; then
@@ -87,6 +87,8 @@ _cleanup() {
 }
 
 for signal in EXIT INT TERM HUP; do
+	# I want this to expand now, not when signaled
+	# shellcheck disable=SC2064
 	trap "signal=${signal} _cleanup" "${signal}"
 done
 
@@ -139,7 +141,8 @@ _crush_image() {
 	if [ "$(_check_validity "$input_file")" = "false" ] ; then
 		return 2
 	fi
-	local mime_type="$(file --brief --no-pad --mime-type "$input_file")"
+	local mime_type
+	mime_type="$(file --brief --no-pad --mime-type "$input_file")"
 	case "$mime_type" in
 		image/png)
 			printf >&2 'Found PNG image: %s\n' "$input_file"
@@ -154,17 +157,22 @@ _crush_image() {
 			return 2
 			;;
 	esac
-	local current_image="$input_file"
+	local current_image
+	current_image="$input_file"
 	current_images+=("$current_image")
-	local backup_image="${input_file}.crush-image.bak"
+	local backup_image
+	backup_image="${input_file}.crush-image.bak"
 	backup_images+=("$backup_image")
-	local temp_image="${current_image}.crush-image-tmp.png"
+	local temp_image
+	temp_image="${current_image}.crush-image-tmp.png"
 	temp_images+=("$temp_image")
 	cp -f --preserve=all -- "$current_image" "$backup_image"
 
-	local old_size="$(stat -c%s "$current_image")"
+	local old_size
+	old_size="$(stat -c%s "$current_image")"
 	"$crush_func" "$current_image" "$temp_image" "$expand"
-	local new_size="$(stat -c%s "$temp_image")"
+	local new_size
+	new_size="$(stat -c%s "$temp_image")"
 	printf >&2 '\nOld size: %d, new size: %d\nNew file %s bytes lower and %s%% size\n\n' "$old_size" "$new_size" "$((old_size - new_size))" "$(_divide_percent "$new_size" "$old_size")"
 
 	mv -f -- "$temp_image" "$current_image"
