@@ -164,9 +164,9 @@ runwaifu2x(){
 	new2xwidth=$(($width * $scale_ratio_2x))
 	new2xheight=$(($height * $scale_ratio_2x))
 
-	#vspipe --arg image_in="$tempin" --arg noise_level="$noise_level" --arg scale_ratio="$scale_ratio_2x" --arg photo="$photo" --arg gpu="$gpu" "$tempscript" "$tempout"
-	waifu2x-ncnn-vulkan -i "$tempin" -o "$tempoutp" -n "$noise_level" -s "$scale_ratio_2x"
-	#ffmpeg -hide_banner -y -f rawvideo -video_size "${new2xwidth}x${new2xheight}" -pixel_format gbrap -i "$tempout" "$tempoutp"
+	vspipe --arg image_in="$tempin" --arg noise_level="$noise_level" --arg scale_ratio="$scale_ratio_2x" --arg photo="$photo" --arg gpu="$gpu" "$tempscript" "$tempout"
+	ffmpeg -hide_banner -y -f rawvideo -video_size "${new2xwidth}x${new2xheight}" -pixel_format gbrap -i "$tempout" "$tempoutp"
+	#waifu2x-ncnn-vulkan -i "$tempin" -o "$tempoutp" -n "$noise_level" -s "$scale_ratio_2x"
 	optipng -force -zc6 -zm8 -zs0 -f0 "$tempoutp"
 	if [ "$photo" = "True" ] ; then
 		convert "$tempoutp" -filter mitchell -resize "${newwidth}x${newheight}" "$tempin"
