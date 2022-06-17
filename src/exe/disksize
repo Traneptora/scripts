@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# disksize.bash
+
+simple_mode=false
+found_minus=false
+arglist=()
+this_script="$0"
+
+usage() {
+    bname="${this_script##*/}"
+    printf >&2 '%s: Print size on disk for files or directories\n' "$bname"
+    printf >&2 'Usage: %s [options] [--] files_or_directories...\n\n' "$bname"
+    printf >&2 'Options:\n'
+    printf >&2 '    --help, -h, -?       Print this help message\n'
+    printf >&2 '    -s, --simple-mode    Print one entry for all provided arguments combined\n'
+    exit "${1-1}"
+}
+
+for arg; do
+    if [[ $found_minus = 'true' ]] ; then
+        arglist+=("$arg")
+    elif [[ $arg = '--' ]] ; then
+        found_minus='true'
+    elif [[ $arg = @(--simple-mode|-s) ]]; then
+        simple_mode='true'
+    elif [[ $arg = @(--help|-h|-?) ]] ; then
+        usage 0
+    else
+        arglist+=("$arg")
+    fi
+done
+
+if [ "${#arglist}" -lt 1 ] ; then
+    usage 1
+fi
+
+size_of() {
+    if [ -d "$1" && ! -L "$1" ] ; then
+        du -bs -- "$1" | grep -Eo '^[0-9]+'
+    else
+        stat -c%s -- "$1"
+    fi
+}
+
+if [ "$simple_mode" = "true" ] ; then
+    byteval="$( ( ( du 2>/dev/null -bs -- "${arglist[@]}" | grep -Eo '^[0-9]+') || printf '0' ) | total)"
+    printf '%s/%s %s\n' "$byteval" "$(printf %s "$byteval" | hprint)" "" | sort -n -t/ | grep -Ev '^0/' | sed 's:^[0-9]*/::'
+else
+    for arg in "${arglist[@]}"; do
+        byteval="$( ( ( du 2>/dev/null -bs -- "$arg" | grep -Eo '^[0-9]+') || printf '0' ) | total)"
+        printf '%s/%s %s\n' "$byteval" "$(printf %s "$byteval" | hprint)" "$arg"
+    done | sort -n -t/ | grep -Ev '^0/' | sed 's:^[0-9]*/::'
+fi
