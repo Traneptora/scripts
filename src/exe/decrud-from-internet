@@ -1,9 +1,8 @@
 #!/bin/sh
-set -e
 
-if [ $# -eq 0 ] ; then
-	echo "Usage: $(basename "$0") <URL> [waifu2x opts]"
-	exit 0
+if [ "$#" -eq 0 ] ; then
+	printf "Usage: %s <URL> [waifu2x opts]\n" "${0##*/}"
+	exit 1
 fi
 
 URL="$1"; shift
@@ -21,7 +20,7 @@ convert -filter Lanczos2Sharp -depth 16 "$TEMPDL" "$TEMPFIN"
 rm -f "$TEMPDL"
 
 # Here's where we actually decrud it
-waifu2x-denoiser --noise-level=3 "$TEMPFIN" "$TEMP_A" "$@"
+waifu2x-ncnn-vulkan -i "$TEMPFIN" -o "$TEMP_A" -s 1 -n 3 "$@"
 
 # We add a small bit of selective blur for compression ratio
 # and we turn it back to an 8-bit png
@@ -31,7 +30,8 @@ convert "$TEMP_A" -selective-blur 0x1+0.5% -depth 8 "$TEMPFIN"
 rm -f "$TEMP_A"
 
 # Re-encode the png to reduce filesize a little bit
-optipng -zc9 -zm8 -zs1 -f5 "$TEMPFIN"
+optipng -zc1 -zm1 -zs0 -f5 "$TEMPFIN"
+png-zopfli-idat <"$TEMPFIN" | sponge "$TEMPFIN"
 
 # Write the filename of the PNG file to stdout
 printf 'Finished!\n%s\n' "$TEMPFIN"

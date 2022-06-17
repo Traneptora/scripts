@@ -27,12 +27,10 @@
 
 # === Start Necessary Boilerplate ===
 _shell_escape() {
-	# local is not strictly POSIX-compliant
-	# but it is supported by many shells including DASH
-    local arg; for arg; do
-        arg="$(printf %s "$arg" | sed "s/'/'\\\\''/g"; printf 'x')"
-        arg="${arg%?}"
-        printf "'%s' " "$arg" | sed "s/^''//" | sed "s/\([^\\\\]\)''/\1/g"
+    for _shell_escape_arg; do
+        _shell_escape_arg="$(printf %s "$_shell_escape_arg" | sed "s/'/'\\\\''/g"; printf 'x')"
+        _shell_escape_arg="${_shell_escape_arg%x}"
+        printf "'%s' " "$_shell_escape_arg" | sed "s/^''//" | sed "s/\([^\\\\]\)''/\1/g"
     done
     printf '\n'
 }
@@ -129,9 +127,9 @@ done
 printf '%s\n' "${updatelist#?}"
 if [ "$update_pkgs" = "true" ] ; then
     if [ -z "$updatelist" ] ; then
-        pacaur -Syu --noconfirm
+        paru -Syu --noconfirm
     else
-        printf '%s\n' "$updatelistnl" | pacaur -Syu --noconfirm -
+        printf '%s\n' "$updatelistnl" | paru -Syu --noconfirm -
     fi
 fi
 

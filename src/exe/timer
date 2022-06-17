@@ -1,5 +1,12 @@
 #!/bin/sh
 
-while printf '%s\r' "$(date +%S.%N)"; do
-    sleep .0001
+start_time="$(date -u +%s.%N)"
+
+get_timer() {
+    elapsed="$(printf '%s %s' "$start_time" "$(date -u +%s.%N)" | awk '{ print $2 - $1 }')"
+    printf '%.3f\r' "$elapsed"
+}
+
+while get_timer; do
+    sleep .003
 done

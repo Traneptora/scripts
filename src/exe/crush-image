@@ -1,197 +1,254 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+# crush-image
+
 found_mm=false
 input_files=()
+
+# only used for error messages
 bname="${0##*/}"
-check_expand="true"
+
+check_expand='false'
+lossy_png='false'
 
 usage(){
-	exec >&2
-	printf 'Usage: %s [options...] input.png...\n\n' "$bname"
-	printf 'Options:\n'
-	printf '    -h, -?,\n'
-	printf '      --help      Print this help message\n'
-	printf '    --no-expand   Do not check images for extra frames, treat file as one image\n'
-	printf '    --expand      Check images for extra frames, and crush as an animation (default)\n'
-	printf '    --            Interpret all arguments after\n'
-	printf '                    this one as an input filename\n'
-	exit "${1-1}"
+    exec >&2
+    printf 'Usage: %s [options...] input.png...\n\n' "$bname"
+    printf 'Options:\n'
+    printf '    -h, -?,\n'
+    printf '      --help        Print this help message\n'
+    printf '    --no-expand     Do not check images for extra frames,\n'
+    printf '                     treat file as one image (default)\n'
+    printf '    --expand        Check images for extra frames, and crush as an animation\n'
+    printf '    --no-lossy-png  Recompress PNGs losslessly (default)'
+    printf '    --lossy-png     Use pngquant to lossily preprocess PNGs\n'
+    printf '    --              Interpret all arguments after\n'
+    printf '                     this one as an input filename\n'
+    exit "${1-1}"
 }
 
 for arg; do
-	if [ "$found_mm" = "true" ] ; then
-		input_files+=("$arg")
-	elif [ "$arg" = "--" ] ; then
-		found_mm="true"
-	elif [ "$arg" = "--help" ] || [ "$arg" = "-h" ] || [ "$arg" = "-?" ]; then
-		usage 0
-	elif [ "$arg" = "--expand" ] ; then
-		check_expand="true"
-	elif [ "$arg" = "--no-expand" ] ; then
-		check_expand="false"
-	else
-		input_files+=("$arg")
-	fi
+    if [[ $found_mm = 'true' ]] ; then
+        input_files+=("$arg")
+        continue
+    fi
+    case $arg in
+        '--')
+            found_mm='true'
+            ;;
+        '--help'|'-h'|'-?')
+            usage 0
+            ;;
+        '--expand')
+            check_expand='true'
+            ;;
+        '--no-expand')
+            check_expand='false'
+            ;;
+        '--lossy-png')
+            lossy_png='true'
+            ;;
+        '--no-lossy-png')
+            lossy_png='false'
+            ;;
+        *)
+            input_files+=("$arg")
+    esac
 done
 
-if [ "${#input_files[@]}" -lt 1 ] ; then
-	usage
+if [[ "${#input_files[@]}" -lt 1 ]] ; then
+    usage
+fi
+
+if [[ $lossy_png = 'true' ]] && ! command >/dev/null -v pngquant ; then
+    printf >&2 '%s: could not find pngquant, cannot use --lossy-png\n' "$bname"
+    exit 1
+fi
+
+if [[ $check_expand = 'true' ]] && ! command >/dev/null -v apngasm ; then
+    printf >&2 '%s: could not find apngasm, cannot use --expand\n' "$bname"
+    exit 1
 fi
 
 temp_images=()
 backup_images=()
 current_images=()
 temp_dirs=()
-success="true"
+success='true'
 
-_check_validity(){
-	fname="$1"
-	# the redirect is intentionally in the wrong order here,
-	# if I had wanted to send both streams to /dev/null
-	# I want to send stderror to stdout and capture it
-	# but discard actual stdout output to /dev/null
-	emsg="$(head -c1 2>&1 >/dev/null "$fname")"
-	if [ -z "$emsg" ] ; then
-		printf 'true'
-	else
-		printf >&2 '%s%s\n' "$bname" "${emsg#head}"
-		printf 'false'
-	fi
+check_validity(){
+    fname="$1"
+    # the redirect is intentionally in the wrong order here,
+    # if I had wanted to send both streams to /dev/null
+    # I want to send stderror to stdout and capture it
+    # but discard actual stdout output to /dev/null
+    emsg="$(head -c1 2>&1 >/dev/null "$fname")"
+    if [ -z "$emsg" ] ; then
+        printf 'true'
+    else
+        printf >&2 '%s%s\n' "$bname" "${emsg#head}"
+        printf 'false'
+    fi
 }
 
-_cleanup() {
-	while (( "${#current_images[@]}" )) ; do
-		current_image="${current_images[0]}"
-		backup_image="${backup_images[0]}"
-		if [ -n "${current_image}" ] ; then
-			printf >&2 'Caught signal, restoring from backup\n'
-			if [ -f "${backup_image}" ] ; then
-				cp --preserve=all -- "$backup_image" "$current_image"
-				rm -f -- "$backup_image"
-			else
-				printf >&2 'Unable to find backup image: %s\n' "$backup_image"
-			fi
-		fi
-		rm -f -- "$backup_image"
-		current_images=("${current_images[@]:1}")
-		backup_images=("${backup_images[@]:1}")
-	done
-	rm -rf -- "${temp_dirs[@]}" "${temp_images[@]}"
-	case "$signal" in
-		EXIT)
-			;;
-		*)
-			trap - "${signal}" EXIT
-			kill -s "${signal}" "$$"
-			;;
-	esac
+cleanup() {
+    while [[ "${#current_images[@]}" -gt 0 ]]; do
+        current_image="${current_images[0]}"
+        backup_image="${backup_images[0]}"
+        if [[ -n "${current_image}" ]] ; then
+            printf >&2 'Caught signal, restoring from backup\n'
+            if [[ -f "${backup_image}" ]] ; then
+                cp --preserve=all -- "$backup_image" "$current_image"
+                rm -f -- "$backup_image"
+            else
+                printf >&2 'Unable to find backup image: %s\n' "$backup_image"
+            fi
+        fi
+        rm -f -- "$backup_image"
+        current_images=("${current_images[@]:1}")
+        backup_images=("${backup_images[@]:1}")
+    done
+    rm -f -- "${temp_images[@]}"
+    rm -fr -- "${temp_dirs[@]}"
 }
 
-for signal in EXIT INT TERM HUP; do
-	# I want this to expand now, not when signaled
-	# shellcheck disable=SC2064
-	trap "signal=${signal} _cleanup" "${signal}"
-done
+trap cleanup EXIT
 
-_divide_percent(){
-	awk -v num="$1" -v denom="$2" 'BEGIN { printf("%.2f\n", 100.0 * num/denom) }'
+divide_percent(){
+    awk -v num="$1" -v denom="$2" 'BEGIN { printf("%.2f\n", 100.0 * num/denom) }'
 }
 
 _crush_png() {
-	if [ "$3" = "true" ] ; then
-		_crush_apng "$@"
-		return "$?"
-	fi
-	printf >&2 'Stripping metadata and performing optipng optimizations\n'
-	optipng -fix -force -preserve -zc9 -zm8 -zs1 -f5 "$1"
-	printf >&2 'Crushing with zopflipng\n'
-	zopflipng -y -m --filters=04mep "$1" "$2"
+    if [ "$3" = "true" ] ; then
+        _crush_apng "$@"
+        return "$?"
+    else
+        printf >&2 'Stripping metadata and performing optipng optimizations...\n'
+        optipng -fix -force -preserve -zc1 -zm1 -zs1 -f5 "$1" -out "$4"
+        if [ "$lossy_png" = "true" ] ; then
+            printf >&2 'Using pngquant...\n'
+            pngquant "$4"
+        fi
+    fi
+    printf >&2 'Crushing with zopfli...\n'
+    png-zopfli-idat <"$4" >"$2"
+    if ! [ "$(file --brief --no-pad --mime-type "$2")" = image/png ] ; then
+        printf >&2 "not a png?\n"
+        exit 2
+    fi
+    if [ "$(stat -c%s "$1")" -lt "$(stat -c%s "$2")" ] ; then
+        printf >&2 'Looks like optipng expanded it, trying without optipng'
+        png-zopfli-idat <"$1" >"$2"
+    fi
 }
 
 # This is to catch errors
 _apngasm() {
-	#printf '%s\n' "$*"
-	apngasm "$@"
+    #printf '%s\n' "$*"
+    apngasm "$@"
 }
 
 _crush_apng() {
-	printf >&2 'Exploding possible animated png\n'
-	local input_file="$1"
-	local temp_file="$2"
-	local temp_dir="${temp_file}.d"
-	temp_dirs+=("$temp_dir")
-	_apngasm --force --output "$temp_dir" --json directive.json --disassemble "$input_file"
-	local new_png; for new_png in "$temp_dir"/*.png; do
-		_crush_image "$new_png" "false"
-	done
-	_apngasm --force --output "$temp_file" --file "${temp_dir}/directive.json"
-	rm -rf -- "$temp_dir"
-	unset "temp_dirs[${#temp_dirs}-1]"
+    printf >&2 'Exploding possible animated png\n'
+    local input_file="$1"
+    local temp_file="$2"
+    local temp_dir="${temp_file}.d"
+    temp_dirs+=("$temp_dir")
+    _apngasm --force --output "$temp_dir" --json directive.json --disassemble "$input_file"
+    local new_png; for new_png in "$temp_dir"/*.png; do
+        _crush_image "$new_png" "false"
+    done
+    _apngasm --force --output "$temp_file" --file "${temp_dir}/directive.json"
+    rm -rf -- "$temp_dir"
 }
 
 _crush_jpg() {
-	printf >&2 'Stripping JPEG exifdata (except timestamp) with jhead\n'
-	jhead -purejpg -mkexif -dsft -autorot "$1"
-	printf >&2 'Optimizing JPEG with jpegtran\n'
-	jpegtran -optimize -progressive <"$1" >"$2"
+    printf >&2 'Stripping JPEG exifdata (except timestamp) with jhead\n'
+    jhead -purejpg -mkexif -dsft -autorot "$1"
+    printf >&2 'Optimizing JPEG with jpegtran\n'
+    jpegtran -optimize -progressive <"$1" >"$2"
+}
+
+_crush_gif(){
+    printf >&2 'Optimizing GIF with gifsicle\n'
+    gifsicle --unoptimize --optimize=3 --no-comments --no-names --no-extensions --no-interlace -o "$2" "$1"
 }
 
 _crush_image() {
-	local input_file="$1"
-	local expand="$2"
-	if [ "$(_check_validity "$input_file")" = "false" ] ; then
-		return 2
-	fi
-	local mime_type
-	mime_type="$(file --brief --no-pad --mime-type "$input_file")"
-	case "$mime_type" in
-		image/png)
-			printf >&2 'Found PNG image: %s\n' "$input_file"
-			crush_func=_crush_png
-			;;
-		image/jpeg)
-			printf >&2 'Found JPEG image: %s\n' "$input_file"
-			crush_func=_crush_jpg
-			;;
-		*)
-			printf >&2 '%s: Unrecognized file type: %s\n' "$bname" "$mime_type"
-			return 2
-			;;
-	esac
-	local current_image
-	current_image="$input_file"
-	current_images+=("$current_image")
-	local backup_image
-	backup_image="${input_file}.crush-image.bak"
-	backup_images+=("$backup_image")
-	local temp_image
-	temp_image="${current_image}.crush-image-tmp.png"
-	temp_images+=("$temp_image")
-	cp -f --preserve=all -- "$current_image" "$backup_image"
+    local input_file="$1"
+    local expand="$2"
+    if [ "$(check_validity "$input_file")" = "false" ] ; then
+        return 2
+    fi
+    local mime_type
+    mime_type="$(file --brief --no-pad --mime-type "$input_file")"
+    case "$mime_type" in
+        image/png)
+            printf >&2 'Found PNG image: %s\n' "$input_file"
+            crush_func=_crush_png
+            ;;
+        image/jpeg)
+            printf >&2 'Found JPEG image: %s\n' "$input_file"
+            crush_func=_crush_jpg
+            ;;
+        image/gif)
+            printf >&2 'Found GIF image: %s\n' "$input_file"
+            crush_func=_crush_gif
+            ;;
+        *)
+            printf >&2 '%s: Unrecognized file type: %s\n' "$bname" "$mime_type"
+            return 2
+            ;;
+    esac
+    local current_image
+    current_image="$input_file"
+    current_images+=("$current_image")
+    local backup_image
+    backup_image="${input_file}.crush-image.bak"
+    backup_images+=("$backup_image")
+    local temp_image
+    local temp_image2
+    temp_image="${current_image}.crush-image-tmp.png"
+    temp_image2="${current_image}.crush-image-tmp2.png"
+    temp_images+=("$temp_image" "$temp_image2")
+    cp -f --preserve=all -- "$current_image" "$backup_image"
 
-	local old_size
-	old_size="$(stat -c%s "$current_image")"
-	"$crush_func" "$current_image" "$temp_image" "$expand"
-	local new_size
-	new_size="$(stat -c%s "$temp_image")"
-	printf >&2 '\nOld size: %d, new size: %d\nNew file %s bytes lower and %s%% size\n\n' "$old_size" "$new_size" "$((old_size - new_size))" "$(_divide_percent "$new_size" "$old_size")"
+    local old_size
+    old_size="$(stat -c%s "$current_image")"
+    "$crush_func" "$current_image" "$temp_image" "$expand" "$temp_image2"
+    local new_size
+    new_size="$(stat -c%s "$temp_image")"
+    printf >&2 '\nOld size: %d, new size: %d\nNew file %s bytes lower and %s%% size\n' "$old_size" "$new_size" "$((old_size - new_size))" "$(divide_percent "$new_size" "$old_size")"
+    if [ "$new_size" -ge "$old_size" ] ; then
+        printf >&2 'New size is larger, so not doing anything\n\n'
+        cp -f --preserve=all -- "$backup_image" "$current_image"
+    else
+        printf >&2 '\n'
+        mv -f -- "$temp_image" "$current_image"
+        cp -f --attributes-only --preserve=all -- "$backup_image" "$current_image"
+    fi
+    rm -f -- "$temp_image" "$backup_image" "$temp_image2"
+    
+    unset "current_images[${#current_images[@]}-1]"
+    unset "backup_images[${#backup_images[@]}-1]"
 
-	mv -f -- "$temp_image" "$current_image"
-	cp -f --attributes-only --preserve=all -- "$backup_image" "$current_image"
-	rm -f -- "$temp_image" "$backup_image"
-	
-	unset "current_images[${#current_images[@]}-1]"
-	unset "temp_images[${#temp_images[@]}-1]"
-	unset "backup_images[${#backup_images[@]}-1]"
+    for target in "$temp_image" "$temp_image2"; do
+        for i in "${!temp_images[@]}"; do
+            if [ "$i" = "$target" ] ; then 
+                unset 'temp_images[i]'
+            fi
+        done
+    done
 }
 
 for input_file in "${input_files[@]}"; do
-	if ! _crush_image "$input_file" "$check_expand"; then
-		success="false"
-	fi
+    if ! _crush_image "$input_file" "$check_expand"; then
+        success="false"
+    fi
 done
 
 if [ "$success" = "true" ] ; then
-	exit 0
+    exit 0
 else
-	exit 2
+    exit 2
 fi

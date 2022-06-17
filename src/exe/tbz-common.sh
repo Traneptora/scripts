@@ -1,7 +1,13 @@
-#!/bin/sh
+#!/hint/sh
 
 # The shebang here is to identify this as an SH script, not a BASH script
 # Actually executing this won't do anything interesting.
+
+if [ -t 2 ] ; then
+	printf >&2 '%sError: %s%s%s\n' "$(tput bold)$(tput setaf 1)" "$(tput sgr0)$(tput setaf 1)" 'You are calling a script using the deprecated framework.' "$(tput sgr0)"
+else
+	printf >&2 'Error: %s\n' 'You are calling a script using the deprecated framework.'
+fi
 
 shell_is_interactive_=false
 

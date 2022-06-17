@@ -1,54 +1,48 @@
-#!/bin/sh
-. tbz-common.sh
+#!/bin/bash
 
-if is_set DISPLAY; then
-	if ! iamroot ; then
-		if command_exists subl; then
-			my_editor="${my_editor-subl}"
-		fi
-	fi
-	if command_exists pluma; then
-		my_editor="${my_editor-pluma}"
-	elif command_exists gedit; then
-		my_editor="${my_editor-gedit}"
-	elif command_exists kwrite; then
-		my_editor="${my_editor-kwrite}"
-	elif command_exists "$EDITOR"; then
-		my_editor="${my_editor-$EDITOR}"
+if [ -n "$DISPLAY" ]; then
+	if command -v code-oss >/dev/null; then	
+		my_editor=${my_editor-code-oss}
+	elif command -v subl >/dev/null; then
+		my_editor=${my_editor-subl}
+	elif command -v pluma >/dev/null; then
+		my_editor=${my_editor-pluma}
+	elif command -v gedit >/dev/null; then
+		my_editor=${my_editor-gedit}
+	elif command -v nano >/dev/null; then
+		my_editor=${my_editor-nano}
+	elif command -v "$EDITOR" >/dev/null; then
+		my_editor=${my_editor-${EDITOR}}
 	fi
 fi
 
-if command_exists nano; then
+if command -v nano >/dev/null; then
 	my_editor="${my_editor-nano}"
-elif command_exists vim; then
+elif command -v vim >/dev/null; then
 	my_editor="${my_editor-vim}"
-elif command_exists emacs; then
-	warning "...really? emacs?"
+elif command -v emacs >/dev/null; then
+	printf '%s\n' "...really? emacs?"
 	my_editor="${my_editor-emacs}"
 else
-	error "No editor found!"
+	printf 'error: %s: %s\n' "${0##*/}" 'No editor found!'
+	exit 1
 fi
 
-num_args="$#"
+my_files=()
 
-i=1; while [ "$i" -le "$num_args" ]; do
-	eval "arg_num_${i}=\"\${$i}\""
-i=$((1+$i)); done
-set --
-i=1; while [ "$i" -le "$num_args" ]; do
-	eval "arg=\"\${arg_num_${i}}\""
-	if command_exists "$arg"; then
-		myfile="$(command -v "$arg")"
+for arg; do
+	if command -v "$arg" >/dev/null; then
+		myfile=$(command -v "$arg")
 	else
-		myfile="$arg"
+		myfile=$arg
 	fi
-	myfile="$(readlink -f "$myfile")"
-	encoding="$(file --brief --mime-encoding "$myfile")"
-	if fmatches "$encoding" 'binary'; then
+	myfile=$(realpath -- "$myfile")
+	encoding=$(file --brief --mime-encoding "$myfile")
+	if [ "$encoding" = binary ]; then
 		printf '%s is a binary file.\n'	"$myfile"
 	else
-		set -- "$@" "$myfile"
+		my_files+=("$myfile")
 	fi
-i=$((1+$i)); done
+done
 
-exec "$my_editor" "$@"
+exec "$my_editor" "${my_files[@]}"
