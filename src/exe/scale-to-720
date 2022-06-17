@@ -1,0 +1,25 @@
+#!/bin/sh
+
+if [ "$#" -lt 1 ] ; then
+	printf >&2 'error: Provide a filename.\nUsage: %s <image>\n' "${0##*/}"
+fi
+
+input_file="$1"
+input_filename="${input_file##*/}"
+input_base="${input_filename%.*}"
+input_ext="${input_filename#"$input_base"}"
+tpng="$(mktemp --suffix=.png)"
+tpng2="$(mktemp --suffix=.png)"
+ffmpeg -y -i "$input_file" "$tpng2"
+width="$(identify -format '%w' "$tpng2")"
+height="$(identify -format '%h' "$tpng2")"
+magick convert "$tpng2" -rotate '-90<' -filter Catrom -resize '1280x720>^' "$tpng"
+if [ "$input_ext" = ".jpg" ] ; then
+	timg="$(mktemp --suffix="$input_ext")"
+	convert "$tpng" "$timg"
+else
+	timg="$tpng"
+fi
+xclip -i -selection clipboard -t image/png <"$tpng"
+eom "$timg"
+sh -c 'sleep 10; rm -f -- "$@"' "$0" "$tpng" "$timg"
