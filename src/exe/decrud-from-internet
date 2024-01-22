@@ -11,13 +11,7 @@ TEMPFIN="$(mktemp --suffix=.png)"
 TEMP_A="$(mktemp --suffix=.png)"
 
 # Download the file
-curl -o "$TEMPDL" --url "$URL"
-
-# We use a filter here because 4:2:0 jpegs need to be
-# upscaled to 4:4:4 before they can be converted to RGB
-# We're about to filter it, so depth 16 is a good idea
-convert -filter Lanczos2Sharp -depth 16 "$TEMPDL" "$TEMPFIN"
-rm -f "$TEMPDL"
+ffmpeg -y -i "$URL" -map v -vf libplacebo=format=gbrp16le -c png -f image2pipe -update 1 -frames 1 "$TEMPFIN"
 
 # Here's where we actually decrud it
 waifu2x-ncnn-vulkan -i "$TEMPFIN" -o "$TEMP_A" -s 1 -n 3 "$@"

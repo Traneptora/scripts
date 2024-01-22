@@ -1,48 +1,48 @@
 #!/bin/bash
 
 if [ -n "$DISPLAY" ]; then
-	if command -v code-oss >/dev/null; then	
-		my_editor=${my_editor-code-oss}
-	elif command -v subl >/dev/null; then
-		my_editor=${my_editor-subl}
-	elif command -v pluma >/dev/null; then
-		my_editor=${my_editor-pluma}
-	elif command -v gedit >/dev/null; then
-		my_editor=${my_editor-gedit}
-	elif command -v nano >/dev/null; then
-		my_editor=${my_editor-nano}
-	elif command -v "$EDITOR" >/dev/null; then
-		my_editor=${my_editor-${EDITOR}}
-	fi
+    if command -v code >/dev/null; then
+        my_editor=${my_editor-code}
+    elif command -v subl >/dev/null; then
+        my_editor=${my_editor-subl}
+    elif command -v pluma >/dev/null; then
+        my_editor=${my_editor-pluma}
+    elif command -v gedit >/dev/null; then
+        my_editor=${my_editor-gedit}
+    elif command -v nano >/dev/null; then
+        my_editor=${my_editor-nano}
+    elif command -v "$EDITOR" >/dev/null; then
+        my_editor=${my_editor-${EDITOR}}
+    fi
 fi
 
 if command -v nano >/dev/null; then
-	my_editor="${my_editor-nano}"
+    my_editor="${my_editor-nano}"
 elif command -v vim >/dev/null; then
-	my_editor="${my_editor-vim}"
+    my_editor="${my_editor-vim}"
 elif command -v emacs >/dev/null; then
-	printf '%s\n' "...really? emacs?"
-	my_editor="${my_editor-emacs}"
+    printf '%s\n' "...really? emacs?"
+    my_editor="${my_editor-emacs}"
 else
-	printf 'error: %s: %s\n' "${0##*/}" 'No editor found!'
-	exit 1
+    printf 'error: %s: %s\n' "${0##*/}" 'No editor found!'
+    exit 1
 fi
 
 my_files=()
 
 for arg; do
-	if command -v "$arg" >/dev/null; then
-		myfile=$(command -v "$arg")
-	else
-		myfile=$arg
-	fi
-	myfile=$(realpath -- "$myfile")
-	encoding=$(file --brief --mime-encoding "$myfile")
-	if [ "$encoding" = binary ]; then
-		printf '%s is a binary file.\n'	"$myfile"
-	else
-		my_files+=("$myfile")
-	fi
+    if command -v "$arg" >/dev/null; then
+        myfile=$(command -v "$arg")
+    else
+        myfile=$arg
+    fi
+    myfile=$(realpath -- "$myfile")
+    encoding=$(file --brief --mime-encoding "$myfile")
+    if [ "$encoding" = binary ]; then
+        printf '%s is a binary file.\n'    "$myfile"
+    else
+        my_files+=("$myfile")
+    fi
 done
 
 exec "$my_editor" "${my_files[@]}"

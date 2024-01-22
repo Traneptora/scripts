@@ -122,13 +122,14 @@ _crush_png() {
     if [ "$3" = "true" ] ; then
         _crush_apng "$@"
         return "$?"
-    else
-        printf >&2 'Stripping metadata and performing optipng optimizations...\n'
-        optipng -fix -force -preserve -zc1 -zm1 -zs1 -f5 "$1" -out "$4"
-        if [ "$lossy_png" = "true" ] ; then
-            printf >&2 'Using pngquant...\n'
-            pngquant "$4"
-        fi
+    fi
+    printf >&2 'Stripping unnecessary chunks...\n'
+    umbrielpng --fix -- "$1"
+    printf >&2 'Performing optipng optimizations...\n'
+    optipng -fix -force -preserve -zc1 -zm1 -zs1 -f5 "$1" -out "$4"
+    if [ "$lossy_png" = "true" ] ; then
+        printf >&2 'Using pngquant...\n'
+        pngquant "$4"
     fi
     printf >&2 'Crushing with zopfli...\n'
     png-zopfli-idat <"$4" >"$2"

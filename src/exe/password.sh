@@ -18,7 +18,7 @@ if [ -e "$STORED_MHASH" ] ; then
 	if  [ -n "$(awk -v n1="$MHASH_AGE" -v n2="0.25" 'BEGIN { print(n1 > n2 ? "x" : "" ) }')" ] ; then
 		rm -f -- "$STORED_MHASH"
 	else
-		MHASH="$(xz -d --format=raw --lzma1=dict=8MiB,lc=1,lp=1,pb=1,mode=normal,nice=64,mf=bt4,depth=0 <"$STORED_MHASH")"
+		MHASH="$(xz -cd --format=raw --lzma1=dict=8MiB,lc=1,lp=1,pb=1,mode=normal,nice=64,mf=bt4,depth=0 <"$STORED_MHASH")"
 	fi
 fi
 
@@ -51,7 +51,7 @@ if [ -z "${MHASH+x}" ] ; then
 	# The cat pipe here causes the commands to be greedy
 	# They won't exit until cat has sent EOF
 	MHASH="$(cat | sh -c "$SHA3_256SUM" | cut -f1 -d' ' | perl -lne 'print pack "H*", $_' | base64)"
-	printf "%s" "$MHASH" | xz -z --format=raw --lzma1=dict=8MiB,lc=1,lp=1,pb=1,mode=normal,nice=64,mf=bt4,depth=0 >"$STORED_MHASH"
+	printf "%s" "$MHASH" | xz -cz --format=raw --lzma1=dict=8MiB,lc=1,lp=1,pb=1,mode=normal,nice=64,mf=bt4,depth=0 >"$STORED_MHASH"
 fi
 
 
