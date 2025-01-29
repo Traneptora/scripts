@@ -4,7 +4,7 @@ printf '%s\n' "#EXTM3U"
 for arg; do
     ffprobeinfo="$(ffprobe 2>/dev/null -i "$arg" -of flat -show_format -select_streams a -show_streams)"
     title="$(printf '%s\n' "$ffprobeinfo" | grep -Ei -e '^(format|streams\.stream\.[0-9]+)\.tags\.title=".*"$' | sed -r 's/^(format|streams\.stream\.[0-9]+)\.tags\.title="(.*)"$/\2/i' | head -n1)"
-    duration="$(printf '%s' "$ffprobeinfo" | grep -Ei -e '^(format|streams\.stream\.[0-9]+)\.duration=".*"$' | sed -r 's/^(format|streams\.stream\.[0-9]+)\.duration="(.*)"$/\2/i' | head -n1)"
+    duration="$(printf '%s\n' "$ffprobeinfo" | grep -Ei -e '^(format|streams\.stream\.[0-9]+)\.duration=".*"$' | sed -r 's/^(format|streams\.stream\.[0-9]+)\.duration="(.*)"$/\2/i' | head -n1)"
     printf '#EXTINF:%s,%s\n' "$duration" "$title"
     printf '%s\n' "$arg"
 done
