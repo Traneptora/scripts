@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+
+if [ -n "${1+x}" ] ; then
+    input_file=$1
+    if [ -r "$input_file" ] ; then
+        exec 3<&0
+        exec <"$input_file"
+    else
+        printf >&2 '%s: %s: Cannot read input file\n' "${0##*/}" "$input_file"
+        exit 1
+    fi
+fi
+
+png_magic=89504e470d0a1a0a
+if ! [ "$(od -t x8 -N 8 --endian=big | head -n1 | awk '{print $2}')" = "$png_magic" ] ; then
+    printf >&2 'Input is not a png\n'
+    exit 2
+fi
+
+if [ -n "${2+x}" ] ; then
+    output_file=$2
+fi
+
+if [ -n "$output_file" ] ; then
+    if [ -w "$output_file" ] ; then
+        exec 4>&1
+        exec >"$output_file"
+    else
+        printf >&2 '%s: %s: Cannot write output file' "${0##*/}" "$output_file"
+        exit
+    fi
+fi
+
+last_header_type=""
+temp_zz=""
+sequence_number=""
+
+dump_chunk() {
+    printf '%08x' "$1" | xxd -r -p
+    printf '%s' "$2"
+    head -c "$1"
+    head -c4
+}
+
+dump_zlib_chunk_stage1() {
+    temp_len=$1
+    if [ "$2" = fdAT ] ; then
+        temp_sequence_number=$(od --endian=big -t u4 -N 4 | head -n1 | awk '{print $2}')
+        temp_len=$((temp_len - 4))
+    fi
+    if [ "$last_header_type" != "$2" ] ; then
+        sequence_number="$temp_sequence_number"
+        temp_zz="$(mktemp --suffix=.or.zz)"
+    fi
+    head -c "$temp_len" >>"$temp_zz"
+    head -c4 >/dev/null
+}
+
+dump_zlib_chunk_stage2() {
+    case "$1" in
+        IDAT|fdAT)
+            ;;
+        *)
+            return 0
+    esac
+    pigz -d -f -n -z - <"$temp_zz" >"${temp_zz%.zz}" || exit 2
+    if [ "$1" = fdAT ] ; then
+        printf '%08x' "$sequence_number" | xxd -r -p >"$temp_zz"
+    else
+        printf '' >"$temp_zz"
+    fi
+    pigz -c -f -n -z -11 - <"${temp_zz%.zz}" >>"$temp_zz"
+    new_len=$(stat -c%s "$temp_zz")
+    printf '%08x' "$new_len" | xxd -r -p
+    printf '%s' "$1"
+    head -c "$new_len" <"$temp_zz"
+    printf '%s' "$1" | cat - "$temp_zz" | crc32.py - | awk '{print $1}' | xxd -r -p
+    rm -f -- "$temp_zz" "${temp_zz%.zz}"
+}
+
+while [ "$last_header_type" != IEND ]; do
+    len=$(od --endian=big -t u4 -N 4 | head -n1 | awk '{print $2}')
+    read -r -N 4 header_type
+    if [ "$last_header_type" != "$header_type" ] ; then
+        dump_zlib_chunk_stage2 "$last_header_type"
+    fi
+    case "$header_type" in
+        IHDR)
+            printf '%s' "$png_magic" | xxd -r -p
+            dump_chunk "$len" "$header_type"
+            ;;
+        IDAT|fdAT)
+            dump_zlib_chunk_stage1 "$len" "$header_type"
+            ;;
+        *)
+            dump_chunk "$len" "$header_type"
+    esac
+    last_header_type="$header_type"
+done
