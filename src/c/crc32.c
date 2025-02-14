@@ -1,64 +1,54 @@
-/*******************************************************************************
-* crc32.c by elektron
-* modernized by thebombzen
-*
-* Notes:
-* This is a hack from someone elses code :
-* http://kremlor.net/projects/crc32
-* Find the most current version of this application at:
-* https://github.com/thebombzen/scripts/
-*******************************************************************************/
+/**
+ * @file crc32.c
+ * @author Leo Izen (Traneptora) <leo.izen@gmail.com>
+ *
+ * This file is in the public domain unless this is not possible by law.
+ * In that case, you may do anything you want with this file for any
+ * reason with or without permission.
+ *
+ * This file is provided as-is. All warranties are waivied, implied or
+ * otherwise, including but not limited to the implied warranties of
+ * merchantability and fitness for a particular purpose.
+ */
 
-#include <stdio.h>
+#include <stdint.h>
 #include <string.h>
-#include <inttypes.h>
+#include <stdio.h>
 
-#include "tbz-crc32.h"
+#include "tranep-crc32.h"
 
-void usage(char *progname) {
-    fprintf(stderr, "%s by elektron and thebombzen\n", progname);
-    fprintf(stderr, "    %s [--help] file1 [fileN...]\n\n", progname);
-}
 
-void print_crc32(uint32_t crc, char *fname){
-    if (fname){
-        printf("%08X %s\n", crc, fname);
-    } else {
-        printf("%08X\n", crc);
-    }
-}
-
-int main(int argc, char *argv[]) {
-
+int main(int argc, char **argv) {
     uint32_t crc;
-    int success;
+    int status;
     int ret = 0;
-    char *error;
+    const char *error;
 
-    if (argc <= 1 || strcmp("--help", argv[1]) == 0){
-        usage(argv[0]);
-        return 1;
+    if (argc < 2 || !strncmp("--help", argv[1], 7)){
+        fprintf(argc < 2 ? stderr : stdout, "%s filename...\n", argv[0]);
+        return argc < 2 ? 1 : 0;
     }
 
-    if (argc == 2){
-        success = tbz_compute_file_crc32(argv[1], &crc, &error);
-        if (success == 0){
-            print_crc32(crc, NULL);
+    if (argc == 2) {
+        status = tranep_compute_filename_crc32(argv[1], &crc, &error);
+        if (!status){
+            printf("%08X\n", crc);
         } else {
-            fprintf(stderr, "%s: %s: %s\n", "crc32", argv[1], error);
+            fprintf(stderr, "%s: %s: %s\n", argv[0], argv[1], error);
             ret = 2;
         }
     } else {
         for (int i = 1; i < argc; i++){
-            success = tbz_compute_file_crc32(argv[i], &crc, &error);
-            if (success == 0){
-                print_crc32(crc, argv[i]);
+            status = tranep_compute_filename_crc32(argv[i], &crc, &error);
+            if (!status){
+                printf("%08X %s\n", crc, argv[i]);
             } else {
-                fprintf(stderr, "%s: %s: %s\n", "crc32", argv[i], error);
+                fprintf(stderr, "%s: %s: %s\n", argv[0], argv[i], error);
                 ret = 2;
                 continue;
             }
         }
     }
+
     return ret;
 }
