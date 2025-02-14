@@ -22,7 +22,6 @@ static const uint8_t ecma_uri_lut[] = {
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1,
 };
 
-
 static inline int hex_to_int(uint8_t hex) {
     if (hex >= '0' && hex <= '9')
         return hex - '0';
@@ -44,7 +43,6 @@ static inline int int_to_hex(uint8_t input) {
 // (if deadlink) https://web.archive.org/web/20210622004141/
 // https://tc39.es/ecma262/multipage/global-object.html#sec-uri-handling-functions
 static int ecma_encode(char **dest, const char *input, const uint8_t *lut) {
-    
     int status = 0;
     size_t str_len = strlen(input);
     char *ret = calloc(str_len + 1, 3);
@@ -54,7 +52,6 @@ static int ecma_encode(char **dest, const char *input, const uint8_t *lut) {
 
     size_t ret_offset = 0;
     size_t byte_offset = 0;
-    size_t garbo;
 
     while (byte_offset < str_len) {
         uint32_t codepoint;
@@ -95,10 +92,9 @@ int ecma_encode_uri(char **dest, const char *input) {
 }
 
 int ecma_decode(char **dest, const char *input){
-
     int status = 0;
     const size_t str_len = strlen(input);
-    char *ret = calloc(str_len + 1, 1); // R, in the spec
+    char *ret = malloc(str_len + 1); // R, in the spec
 
     if (!ret)
         goto decode_fail;
