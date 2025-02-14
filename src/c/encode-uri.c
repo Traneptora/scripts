@@ -1,26 +1,30 @@
-#include <stdio.h>
-#include <string.h>
-#include <stdint.h>
+#include <stddef.h>
 #include <stdlib.h>
-#include "utf8.h"
+#include <stdio.h>
+
 #include "ecma-encode.h"
 
 int main(int argc, char **argv){
-    char *dest;
-    int status = 0;
-    if (argc > 1){
-        size_t count = 0;
-        while (argc > ++count){
-            status |= ecma_encode_uri(&dest, argv[count]);
-            if (status != 0){
-                fprintf(stderr, "%s: error: %d: %s: \n", "encode-uri", status, argv[count]);
-                return status;
-            }
-            printf("%s\n", dest);
-        }
-    } else {
-        fprintf(stderr, "%s string...\n", "encode-uri");
+    char *dest = NULL;
+    size_t count = 0;
+
+    if (argc < 2) {
+        fprintf(stderr, "%s string...\n", argv[0]);
         return 1;
     }
-    return status;
+
+    while (++count < argc) {
+        int status = ecma_encode_uri(&dest, argv[count]);
+        if (status < 0) {
+            fprintf(stderr, "%s: error: %s: \n", argv[0], argv[count]);
+            if (dest)
+                free(dest);
+            return 2;
+        }
+        printf("%s\n", dest);
+        free(dest);
+        dest = NULL;
+    }
+
+    return 0;
 }
