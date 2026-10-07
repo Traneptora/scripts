@@ -1,0 +1,27 @@
+#!/bin/sh
+
+status=0
+for input_filename; do
+    if ! [ -r "$input_filename" ] ; then
+        printf 'cannot read file: %s\n' "$input_filename"
+        status="$((status | 1))"
+        continue
+    fi
+    ffprobe_output=$(ffprobe -v fatal -i "$input_filename" -of flat -show_format -select_streams a -show_streams)
+    track_number=$(printf '%s\n' "$ffprobe_output" | grep -Po -e '^(streams\.stream\.[0-9]+|format)\.tags\.track=".*?(?="$)' | sed -r 's/^(streams\.stream\.[0-9]+|format)\.tags\.track="//')
+    title=$(printf '%s\n' "$ffprobe_output" | grep -Pio -e '^(streams\.stream\.[0-9]+|format)\.tags\.title=".*?(?="$)' | sed -r 's/^(streams\.stream\.[0-9]+|format)\.tags\.title="//i')
+    if [ -z "$title" ] ; then
+        printf 'not audio: %s\n' "$input_filename"
+        status="$((status | 2))"
+        continue
+    fi
+    input_basename="${input_filename##*/}"
+    input_extension="${input_filename#"${input_filename%.*}"}"
+    new_filename=$(printf '%02d %s%s' "$(printf '%s' "$track_number" | sed 's/^0*//')" "$title" "$input_extension" | sed 's:\s*/\s*: - :g')
+    if ! [ "$input_filename" = "$new_filename" ] ; then
+        mv -fv -- "$input_filename" "$new_filename"
+    else
+        printf 'hannibal: files is the same: %s\n' "$input_filename"
+    fi
+done
+exit "$status"
