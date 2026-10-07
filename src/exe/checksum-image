@@ -1,0 +1,19 @@
+#!/bin/sh
+
+_image_checksum() {
+    magick "$1" RGBA:- | sha384-base64
+}
+
+if [ -z "${1+x}" ] ; then
+    set -- '-'
+fi
+
+if [ -z "${2+x}" ] ; then
+    sha="$(_image_checksum "$1")"
+    printf '%s\n' "$sha"
+else
+    for arg; do
+        sha="$(_image_checksum "$arg")"
+        printf '%s %s\n' "$sha" "$arg"
+    done
+fi
