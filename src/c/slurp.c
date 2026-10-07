@@ -26,16 +26,19 @@ typedef struct {
     size_t capacity;
 } SlurpBuffer;
 
+static inline void freep(void *p) {
+    void **vp = p;
+    if (!vp || !*vp)
+        return;
+    free(*vp);
+    *vp = NULL;
+};
+
 static void free_slurpbuffer(SlurpBuffer **sb) {
     if (!sb)
         return;
-    if (!*sb)
-        return;
-    if ((*sb)->buf)
-        free((*sb)->buf);
-    (*sb)->buf = NULL;
-    free(*sb);
-    *sb = NULL;
+    free((*sb)->buf);
+    freep(sb);
 }
 
 static SlurpBuffer *new_slurpbuffer(size_t capacity) {
@@ -44,10 +47,10 @@ static SlurpBuffer *new_slurpbuffer(size_t capacity) {
     if (capacity > SB_MAX_CAPACITY)
         return NULL;
 
-    sb = malloc(sizeof(SlurpBuffer));
+    sb = malloc(sizeof(*sb));
     if (!sb)
         goto fail;
-    
+
     sb->buf = malloc(capacity);
     if (!sb->buf)
         goto fail;
@@ -76,70 +79,100 @@ static SlurpBuffer *get_larger_slurpbuffer(SlurpBuffer *sb) {
     return new_sb;
 }
 
-int main(int argc, char **argv) {
-    size_t bytes_read, bytes_written;
-    size_t remaining;
-    FILE *fout = stdout;
-    SlurpBuffer *sb = new_slurpbuffer(SB_INIT_BUFSIZE);
-    int ret;
+static int slurp_from(const char *argv0, FILE *in, SlurpBuffer **sbp)
+{
+    size_t bytes_read;
+    SlurpBuffer *sb = *sbp;
+    int ret = 0;
 
     while (1) {
-        remaining = sb->capacity - sb->buflen;
+        size_t remaining = sb->capacity - sb->buflen;
         if (!remaining) {
             sb = get_larger_slurpbuffer(sb);
             if (!sb) {
-                fprintf(stderr, "%s: could not allocate buffer\n", argv[0]);
-                ret = 3;
-                goto fail;
+                fprintf(stderr, "%s: could not allocate buffer\n", argv0);
+                ret = ENOMEM;
+                goto end;
             }
+            *sbp = sb;
             remaining = sb->capacity - sb->buflen;
         }
-        bytes_read = fread(sb->buf + sb->buflen, 1, remaining, stdin);
-        if (bytes_read < remaining) {
-            if (ferror(stdin)) {
-                perror(argv[0]);
-                ret = 1;
-                goto fail;
-            }
+        bytes_read = fread(sb->buf + sb->buflen, 1, remaining, in);
+        if (bytes_read < remaining && ferror(in)) {
+            perror(argv0);
+            ret = errno;
+            goto end;
         }
         sb->buflen += bytes_read;
-        if (feof(stdin)) {
-            fclose(stdin);
+        if (feof(in))
             break;
-        }
     }
 
-    remaining = sb->buflen;
+end:
+    fclose(in);
+    return ret;
+}
 
-    if (argc > 1) {
-        fout = fopen(argv[1], "wb");
-        if (!fout) {
-            perror(argv[0]);
-            ret = 1;
-            goto fail;
-        }
+int main(int argc, const char *const *argv) {
+    const char *fout_name = NULL;
+    SlurpBuffer *sb;
+    FILE *fout = NULL;
+    const char *const *fnamep = NULL;
+    int fnamec = 0;
+    int ret = 0, mmoff = 1;
+
+    if (argc > 1 && !strncmp(argv[1], "--o=", 4)) {
+        fout_name = argv[1] + 4;
+        mmoff = 2;
     }
 
-    while (remaining > 0) {
-        bytes_written = fwrite(sb->buf + sb->buflen - remaining, 1, remaining, fout);
-        if (bytes_written < remaining) {
-            if (ferror(fout)) {
-                perror(argv[0]);
-                ret = 2;
-                goto fail;
+    if (argc > mmoff) {
+        if (!strcmp(argv[mmoff], "--")) {
+            if (argc > mmoff + 1) {
+                fnamep = argv + mmoff + 1;
+                fnamec = argc - (mmoff + 1);
             }
+        } else {
+            fnamep = argv + mmoff;
+            fnamec = argc - mmoff;
         }
-        remaining -= bytes_written;
     }
 
-    fclose(fout);
-    free_slurpbuffer(&sb);
+    sb = new_slurpbuffer(SB_INIT_BUFSIZE);
+    if (!sb) {
+        ret = ENOMEM;
+        goto end;
+    }
 
-    return 0;
+    do {
+        FILE *fin = stdin;
+        if (fnamep && fnamec > 0) {
+            fin = fopen(*fnamep, "rb");
+            if (!fin)
+                goto end;
+        }
+        ret = slurp_from(argv[0], fin, &sb);
+        if (ret)
+            goto end;
+    } while (fnamep++ && --fnamec > 0);
 
-fail:
+    if (fout_name) {
+        fout = fopen(fout_name, "wb");
+        if (!fout)
+            goto end;
+    } else {
+        fout = stdout;
+    }
+
+    size_t written = fwrite(sb->buf, 1, sb->buflen, fout);
+    if (written < sb->buflen && ferror(fout)) {
+        perror(argv[0]);
+        ret = errno;
+    }
+
+end:
     free_slurpbuffer(&sb);
-    if (fout && fout != stdout)
+    if (fout)
         fclose(fout);
     return ret;
 }
