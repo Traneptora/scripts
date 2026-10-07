@@ -36,7 +36,7 @@ static inline int int_to_hex(uint8_t input) {
     if (input < 10)
         return input + '0';
     if (input < 16)
-        return input + 'a';
+        return (input - 10) + 'a';
     return -1;
 }
 
