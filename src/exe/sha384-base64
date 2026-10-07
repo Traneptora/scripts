@@ -8,7 +8,7 @@ _sha384_base64() {
     # 
     # base64url encoding used here, i.e. URL-safe version
     # https://datatracker.ietf.org/doc/html/rfc4648#section-5
-    sha384sum "$1" | awk '{print $1}' | xxd -r -p | base64 --wrap=0 | tr '+/' '-_' | tr -d '='
+    sha384sum "$1" | awk '{print $1}' | xxd -r -p | base64 --wrap=0 | tr '/+' '_-' | tr -d '='
 }
 
 if [ -z "${1+x}" ] ; then
