@@ -1,0 +1,26 @@
+#!/bin/sh
+
+_sha384_base64() {
+    # 384 is 48 bytes, which is a multiple of 6
+    # a 384-bit checksum becomes a 64-bit base64 checksum
+    # this should never produce `=`
+    # so the last `tr` is just a failsafe
+    # 
+    # base64url encoding used here, i.e. URL-safe version
+    # https://datatracker.ietf.org/doc/html/rfc4648#section-5
+    sha384sum "$1" | awk '{print $1}' | xxd -r -p | base64 --wrap=0 | tr '+/' '-_' | tr -d '='
+}
+
+if [ -z "${1+x}" ] ; then
+    set -- '-'
+fi
+
+if [ -z "${2+x}" ] ; then
+    sha="$(_sha384_base64 "$1")"
+    printf '%s\n' "$sha"
+else
+    for arg; do
+        sha="$(_sha384_base64 "$arg")"
+        printf '%s %s\n' "$sha" "$arg"
+    done
+fi
