@@ -1,0 +1,48 @@
+#!/bin/sh
+# loggers.sh
+# Author: Leo Izen (Traneptora) 2022
+# This file is in the public domain. You can do whatever you want with this file.
+
+if [ -z "$2" ] ; then
+    printf '%s: No command provided\nUsage: %s <namespace> <command> [args...]\n' "${0##*/}" "${0##*/}" >&2
+    exit 1
+fi
+
+namespace=$(printf '%s' "$1" | tr -d '/'; printf x)
+namespace="${namespace%x}"
+shift
+
+log_dir="${HOME}/.local/var/log/${namespace}"
+mkdir -p "$log_dir"
+
+# only query current date once
+# prevents a race condition if this is run on day reset
+now=$(date -u '+%s')
+now_f=$(date -u -Is -d "@${now}")
+today=$(date -u -Id -d "@${now}")
+# 86400 = 24 * 3600
+# i.e. seconds in a day
+# +2 handles a leap second if it's added today
+# theoretically this can cause "yesterday" to be two days ago on daybraek
+# which is okay, what we really don't want is for them to match
+yesterday=$(date -u -Id -d "@$((now - 86402))")
+
+# zip up old logs
+yesterday_log="${log_dir}/${namespace}_${yesterday}.log"
+if [ -f "$yesterday_log" ] ; then
+    if test -x "$(command -v pigz)"; then
+        comp='pigz'
+    else
+        comp='gzip'
+    fi
+    "$comp" -9 "$yesterday_log"
+fi
+
+# today's log
+log_file="${log_dir}/${namespace}_${today}.log"
+# execute the thing
+exec >>"$log_file"
+exec 2>&1
+
+printf '[UTC %s] ' "$now_f"
+exec "$@"
