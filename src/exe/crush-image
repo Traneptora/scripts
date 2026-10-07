@@ -10,19 +10,22 @@ bname="${0##*/}"
 
 check_expand='false'
 lossy_png='false'
+zopfli_idat='true'
 
 usage(){
     exec >&2
     printf 'Usage: %s [options...] input.png...\n\n' "$bname"
     printf 'Options:\n'
     printf '    -h, -?,\n'
-    printf '      --help        Print this help message\n'
-    printf '    --no-expand     Do not check images for extra frames,\n'
-    printf '                     treat file as one image (default)\n'
-    printf '    --expand        Check images for extra frames, and crush as an animation\n'
-    printf '    --no-lossy-png  Recompress PNGs losslessly (default)'
-    printf '    --lossy-png     Use pngquant to lossily preprocess PNGs\n'
-    printf '    --              Interpret all arguments after\n'
+    printf '      --help         Print this help message\n'
+    printf '    --no-expand      Do not check images for extra frames,\n'
+    printf '                      treat file as one image (default)\n'
+    printf '    --expand         Check images for extra frames, and crush as an animation\n'
+    printf '    --no-lossy-png   Recompress PNGs losslessly (default)\n'
+    printf '    --lossy-png      Use pngquant to lossily preprocess PNGs\n'
+    printf '    --no-zopfli-png  Skip the zopfli step\n'
+    printf '    --zopfli-png     Use zopfli to crush the IDAT chunks further (default)\n'
+    printf '    --               Interpret all arguments after\n'
     printf '                     this one as an input filename\n'
     exit "${1-1}"
 }
@@ -50,6 +53,12 @@ for arg; do
             ;;
         '--no-lossy-png')
             lossy_png='false'
+            ;;
+        '--no-zopfli-png')
+            zopfli_idat='false'
+            ;;
+        '--zopfli-png')
+            zopfli_idat='true'
             ;;
         *)
             input_files+=("$arg")
@@ -126,18 +135,26 @@ _crush_png() {
     printf >&2 'Stripping unnecessary chunks...\n'
     umbrielpng --fix-in-place -- "$1"
     printf >&2 'Performing optipng optimizations...\n'
-    optipng -fix -force -preserve -zc1 -zm1 -zs1 -f5 "$1" -out "$4"
+    if [ "$zopfli_idat" = "true" ] ; then
+        optipng -fix -force -preserve -zc1 -zm1 -zs1 -f5 "$1" -out "$4"
+    else
+        optipng -fix -force -preserve -zc9 -zm8 -zs1 -f5 "$1" -out "$4"
+    fi
     if [ "$lossy_png" = "true" ] ; then
         printf >&2 'Using pngquant...\n'
         pngquant "$4"
     fi
-    printf >&2 'Crushing with zopfli...\n'
-    png-zopfli-idat <"$4" >"$2"
+    if [ "$zopfli_idat" = "true" ] ; then
+        printf >&2 'Crushing with zopfli...\n'
+        png-zopfli-idat <"$4" >"$2"
+    else
+        cp -- "$4" "$2"
+    fi
     if ! [ "$(file --brief --no-pad --mime-type "$2")" = image/png ] ; then
         printf >&2 "not a png?\n"
         exit 2
     fi
-    if [ "$(stat -c%s "$1")" -lt "$(stat -c%s "$2")" ] ; then
+    if [ "$(stat -c%s "$1")" -lt "$(stat -c%s "$2")" ] && [ "$zopfli_idat" = "true" ] ; then
         printf >&2 'Looks like optipng expanded it, trying without optipng'
         png-zopfli-idat <"$1" >"$2"
     fi
@@ -164,10 +181,14 @@ _crush_apng() {
 }
 
 _crush_jpg() {
-    printf >&2 'Stripping JPEG exifdata (except timestamp) with jhead\n'
-    jhead -purejpg -mkexif -dsft -autorot "$1"
+    printf >&2 'Stripping JPEG exifdata jhead\n'
+    jhead -purejpg -autorot "$1"
     printf >&2 'Optimizing JPEG with jpegtran\n'
     jpegtran -optimize -progressive <"$1" >"$2"
+    cp -- "$2" "$4"
+    if optimize-jpeg -- "$4" ; then
+        cp -- "$4" "$2"
+    fi
 }
 
 _crush_gif(){
