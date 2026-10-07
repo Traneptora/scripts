@@ -1,0 +1,23 @@
+#!/bin/sh
+
+for ip in '1.1.1.1' '8.8.8.8' '8.8.4.4'; do
+    if ping -W1 -c1 "$ip" >/dev/null; then
+        printf 'Internet Up, Network Up, %s pingable\n' "$ip"
+        exit 0
+    fi
+done
+
+_gateway=$(arp -a | grep -Po -e '(?<=^_gateway\s\()([0-9]+\.){3}[0-9]+(?=\))')
+
+if [ -z "$_gateway" ] ; then
+    printf 'Network Down, Gateway Address Unknown\n'
+    exit 3
+fi
+
+if ping -W1 -c1 "${_gateway}" >/dev/null; then
+    printf 'Internet Down, Network Up, DNS unreachable, %s pingable\n' "${_gateway}"
+    exit 1
+else
+    printf 'Network Down, %s known but unreachable\n' "${_gateway}"
+    exit 2
+fi
